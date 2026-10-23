@@ -8,7 +8,7 @@ import sys
 import time
 from pathlib import Path
 
-from . import backtest, bps, features, macro, pihps, report, store
+from . import backtest, bps, features, macro, pihps, publish, report, store
 
 
 def _cmd_refs(db: str) -> int:
@@ -192,6 +192,26 @@ def _cmd_report(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_export(args: argparse.Namespace) -> int:
+    with open(args.dataset, newline="", encoding="utf-8") as fh:
+        rows = list(csv.DictReader(fh))
+    if not rows:
+        print(f"dataset kosong: {args.dataset}", file=sys.stderr)
+        return 1
+    csv_path, md_path = publish.write(
+        rows,
+        args.out,
+        target=args.target,
+        comparator=args.comparator,
+    )
+    info = publish.summary(rows, target=args.target, comparator=args.comparator)
+    print(
+        f"export: {info['n_rows']} baris, {info['n_months']} bulan, "
+        f"{info['n_commodities']} komoditas -> {csv_path}"
+    )
+    print(f"datasheet: {md_path}")
+    return 0
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="pangan", description="Harga pangan harian PIHPS -> SQLite")
     parser.add_argument("--db", default="data/pangan.db")
@@ -251,6 +271,12 @@ def main(argv: list[str] | None = None) -> int:
     rp.add_argument("--min-train", type=int, default=30)
     rp.add_argument("--out", default="report.html")
 
+    ex = sub.add_parser("export", help="dataset bulanan + datasheet untuk publikasi")
+    ex.add_argument("--dataset", default="data/dataset_food.csv")
+    ex.add_argument("--out", default="data/publish")
+    ex.add_argument("--target", default=publish.TARGET)
+    ex.add_argument("--comparator", default=publish.COMPARATOR)
+
     args = parser.parse_args(argv)
     try:
         if args.cmd == "refs":
@@ -267,6 +293,8 @@ def main(argv: list[str] | None = None) -> int:
             return _cmd_backtest(args)
         if args.cmd == "report":
             return _cmd_report(args)
+        if args.cmd == "export":
+            return _cmd_export(args)
         return _cmd_ingest(args)
     except (bps.BpsError, pihps.PihpsError) as exc:
         print(f"error: {exc}", file=sys.stderr)
