@@ -170,3 +170,43 @@ def test_rolling_without_headline_sets_none():
     ]
     result = backtest.rolling(panel, min_train=5)
     assert all(r["pred_headline"] is None for r in result)
+    assert all(r["pred_headline_feat"] is None for r in result)
+
+def test_rolling_adds_nested_headline_plus_price():
+    result = backtest.rolling(_headline_panel(), min_train=5)
+    assert result
+    assert all(isinstance(r["pred_headline_feat"], float) for r in result)
+    assert all(r["pred_headline_feat"] != r["pred_headline"] for r in result)
+
+def test_dm_test_no_difference():
+    rows = [{"y": 1.0, "base": 1.0, "feat": 1.0} for _ in range(40)]
+    out = backtest.dm_test(rows, base="base", feat="feat")
+    assert out["diff"] == 0.0
+    assert out["stat"] == 0.0
+    assert out["p_value"] == 1.0
+
+def test_dm_test_detects_clear_improvement():
+    rows = [
+        {"y": 1.0, "base": 1.0 + (i % 3) * 0.1, "feat": 1.0 + (i % 5) * 0.01}
+        for i in range(40)
+    ]
+    out = backtest.dm_test(rows, base="base", feat="feat")
+    assert out["diff"] < 0
+    assert out["stat"] < -3
+    assert out["p_value"] < 0.01
+
+def test_dm_test_sign_is_feat_minus_base():
+    rows = [
+        {"y": 1.0, "base": 1.0 + (i % 5) * 0.01, "feat": 1.0 + (i % 3) * 0.1}
+        for i in range(40)
+    ]
+    out = backtest.dm_test(rows, base="base", feat="feat")
+    assert out["diff"] > 0
+    assert out["stat"] > 3
+
+def test_dm_test_constant_nonzero_difference_is_infinite():
+    rows = [{"y": 1.0, "base": 0.0, "feat": 1.0} for _ in range(40)]
+    out = backtest.dm_test(rows, base="base", feat="feat")
+    assert out["diff"] == -1.0
+    assert out["stat"] == float("-inf")
+    assert out["p_value"] == 0.0
