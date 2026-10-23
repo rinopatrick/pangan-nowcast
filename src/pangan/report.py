@@ -9,6 +9,7 @@ MODELS = [
     ("pred_ar", "AR(1)", "#1a73e8"),
     ("pred_feat", "AR(1)+harga", "#d93025"),
     ("pred_headline", "AR(1)+headline", "#188038"),
+    ("pred_headline_feat", "AR(1)+headline+harga", "#e37400"),
 ]
 
 def available_models(rows: list[dict]) -> list[tuple[str, str, str]]:
@@ -126,6 +127,17 @@ def build_report(
             f" Vs AR(1)+headline (n={len(both)}): {ci_hl['diff']:+.3f}"
             f" ({ci_hl['lo']:+.3f} s/d {ci_hl['hi']:+.3f})."
         )
+    nested_note = ""
+    nested = backtest.with_predictions(
+        rows, ["pred_headline", "pred_headline_feat"]
+    )
+    if nested:
+        dm = backtest.dm_test(nested, base="pred_headline", feat="pred_headline_feat")
+        nested_note = (
+            f" Uji bersarang (utama), AR(1)+headline+harga vs AR(1)+headline:"
+            f" selisih MAE {dm['diff']:+.3f}, statistik Diebold-Mariano"
+            f" {dm['stat']:+.2f} (p={dm['p_value']:.3f}, n={dm['n']}, lag={dm['lag']})."
+        )
     period = f"{rows[0]['month']} s/d {rows[-1]['month']}"
     return f"""<!doctype html>
 <html lang="id"><head><meta charset="utf-8">
@@ -138,7 +150,8 @@ minimum {min_train} bulan latih · sumber {dataset}</div>
 {svg_chart(rows)}
 <p class="note">Selisih MAE fitur harga vs naive: {ci['diff']:+.3f}
 (95% CI {ci['lo']:+.3f} s/d {ci['hi']:+.3f}). Vs AR(1): {ci_ar['diff']:+.3f}
-({ci_ar['lo']:+.3f} s/d {ci_ar['hi']:+.3f}).{headline_note} CI bootstrap 5.000 resample.
-Horizon 0 = nowcast akhir bulan; harga bulan berjalan sudah diketahui, CPI belum rilis.</p>
+({ci_ar['lo']:+.3f} s/d {ci_ar['hi']:+.3f}).{headline_note}{nested_note}
+CI bootstrap 5.000 resample. Horizon 0 = nowcast akhir bulan; harga bulan
+berjalan sudah diketahui, CPI belum rilis.</p>
 </body></html>
 """

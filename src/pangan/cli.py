@@ -143,6 +143,7 @@ def _cmd_backtest(args: argparse.Namespace) -> int:
         ("AR(1)", "pred_ar"),
         ("AR(1)+harga", "pred_feat"),
         ("AR(1)+headline", "pred_headline"),
+        ("AR(1)+headline+harga", "pred_headline_feat"),
     ]:
         subset = backtest.with_predictions(rows, [key])
         if not subset:
@@ -162,6 +163,11 @@ def _cmd_backtest(args: argparse.Namespace) -> int:
         f"selisih MAE (harga - AR):    {ci_ar['diff']:+.3f}  "
         f"95% CI [{ci_ar['lo']:+.3f}, {ci_ar['hi']:+.3f}]"
     )
+    dm_ar = backtest.dm_test(rows, base="pred_ar", feat="pred_feat")
+    print(
+        f"DM (harga - AR): {dm_ar['stat']:+.2f}  p={dm_ar['p_value']:.3f}  "
+        f"n={dm_ar['n']}  lag={dm_ar['lag']}"
+    )
     both = backtest.with_predictions(rows, ["pred_feat", "pred_headline"])
     if both:
         ci_hl = backtest.mae_diff_ci(both, base="pred_headline", feat="pred_feat")
@@ -169,7 +175,31 @@ def _cmd_backtest(args: argparse.Namespace) -> int:
             f"selisih MAE (harga - headline, n={len(both)}): {ci_hl['diff']:+.3f}  "
             f"95% CI [{ci_hl['lo']:+.3f}, {ci_hl['hi']:+.3f}]"
         )
-    fields = ["month", "origin", "y", "pred_base", "pred_ar", "pred_feat", "pred_headline", "n_train"]
+        dm_hl = backtest.dm_test(both, base="pred_headline", feat="pred_feat")
+        print(
+            f"DM (harga - headline): {dm_hl['stat']:+.2f}  p={dm_hl['p_value']:.3f}  "
+            f"n={dm_hl['n']}  lag={dm_hl['lag']}"
+        )
+    nested = backtest.with_predictions(
+        rows, ["pred_headline", "pred_headline_feat"]
+    )
+    if nested:
+        dm = backtest.dm_test(nested, base="pred_headline", feat="pred_headline_feat")
+        print(
+            f"uji bersarang (utama): headline+harga - headline = {dm['diff']:+.3f}  "
+            f"DM={dm['stat']:+.2f}  p={dm['p_value']:.3f}  n={dm['n']}  lag={dm['lag']}"
+        )
+    fields = [
+        "month",
+        "origin",
+        "y",
+        "pred_base",
+        "pred_ar",
+        "pred_feat",
+        "pred_headline",
+        "pred_headline_feat",
+        "n_train",
+    ]
     with open(args.out, "w", newline="", encoding="utf-8") as fh:
         writer = csv.DictWriter(fh, fieldnames=fields, extrasaction="ignore")
         writer.writeheader()

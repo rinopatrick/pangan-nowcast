@@ -31,8 +31,14 @@ def test_svg_chart_has_lines_for_all_models():
 
 def test_svg_chart_adds_headline_line_when_available():
     svg = report.svg_chart(_rows(headline=True))
-    assert svg.count("<polyline") == 5
+    assert svg.count("<polyline") == 6
     assert "AR(1)+headline" in svg
+    assert "AR(1)+headline+harga" in svg
+
+def test_build_report_primary_test_is_nested():
+    html = report.build_report(_rows(headline=True), "food_mtm", 0, "data/x.csv", 2)
+    assert "bersarang" in html
+    assert "Diebold" in html
 
 def test_build_report_contains_ci_and_period():
     html = report.build_report(_rows(), "food_mtm", 0, "data/x.csv", 2)

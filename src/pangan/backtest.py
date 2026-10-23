@@ -86,7 +86,12 @@ def _fit_predict(train: list[dict], row: dict, cols: list[str]) -> float:
 
 
 def rolling(panel: list[dict], cols: list[str] = FEATURES, min_train: int = 30) -> list[dict]:
-    """Untuk tiap bulan uji, model hanya melihat data sebelum bulan itu."""
+    """Untuk tiap bulan uji, model hanya melihat data sebelum bulan itu.
+
+    `pred_headline_feat` adalah uji bersarang: AR(1) + headline + fitur harga.
+    Perbandingannya dengan `pred_headline` mengukur tambahan fitur harga setelah
+    inflasi umum diketahui.
+    """
     out = []
     for i, row in enumerate(panel):
         needed = ["y_lag1", *cols]
@@ -96,6 +101,7 @@ def rolling(panel: list[dict], cols: list[str] = FEATURES, min_train: int = 30) 
         if len(train) < min_train:
             continue
         pred_headline = None
+        pred_headline_feat = None
         if row.get(COMPARATOR) is not None:
             cmp_needed = ["y_lag1", COMPARATOR]
             cmp_train = [
@@ -103,6 +109,14 @@ def rolling(panel: list[dict], cols: list[str] = FEATURES, min_train: int = 30) 
             ]
             if len(cmp_train) >= min_train:
                 pred_headline = _fit_predict(cmp_train, row, [COMPARATOR])
+            nested_needed = ["y_lag1", COMPARATOR, *cols]
+            nested_train = [
+                r for r in panel[:i] if all(r.get(k) is not None for k in nested_needed)
+            ]
+            if len(nested_train) >= min_train:
+                pred_headline_feat = _fit_predict(
+                    nested_train, row, [COMPARATOR, *cols]
+                )
         out.append(
             {
                 "month": row["target_month"],
@@ -112,6 +126,7 @@ def rolling(panel: list[dict], cols: list[str] = FEATURES, min_train: int = 30) 
                 "pred_ar": _fit_predict(train, row, []),
                 "pred_feat": _fit_predict(train, row, cols),
                 "pred_headline": pred_headline,
+                "pred_headline_feat": pred_headline_feat,
                 "n_train": len(train),
             }
         )
@@ -151,3 +166,34 @@ def mae_diff_ci(
         "lo": float(np.percentile(sample, 2.5)),
         "hi": float(np.percentile(sample, 97.5)),
     }
+
+def dm_test(
+    rows: list[dict],
+    base: str = "pred_ar",
+    feat: str = "pred_feat",
+    lag: int | None = None,
+) -> dict:
+    """Diebold-Mariano dengan varians Newey-West.
+
+    `diff` = MAE(feat) - MAE(base); negatif berarti `feat` lebih baik.
+    `stat` memakai tanda yang sama. `lag` default mengikuti aturan 4*(n/100)^(2/9).
+    """
+    d = [abs(r["y"] - r[feat]) - abs(r["y"] - r[base]) for r in rows]
+    n = len(d)
+    if n < 2:
+        raise ValueError("dm_test butuh minimal 2 baris")
+    mean = sum(d) / n
+    if lag is None:
+        lag = max(0, int(round(4 * (n / 100) ** (2 / 9))))
+    lrv = sum((x - mean) ** 2 for x in d) / n
+    for k in range(1, lag + 1):
+        auto = sum((d[i] - mean) * (d[i - k] - mean) for i in range(k, n)) / n
+        lrv += 2 * (1 - k / (lag + 1)) * auto
+    if lrv <= 0:
+        if mean == 0:
+            return {"diff": mean, "stat": 0.0, "p_value": 1.0, "lag": lag, "n": n}
+        stat = math.copysign(math.inf, mean)
+        return {"diff": mean, "stat": stat, "p_value": 0.0, "lag": lag, "n": n}
+    stat = mean / math.sqrt(lrv / n)
+    p_value = 2 * (1 - 0.5 * (1 + math.erf(abs(stat) / math.sqrt(2))))
+    return {"diff": mean, "stat": stat, "p_value": p_value, "lag": lag, "n": n}

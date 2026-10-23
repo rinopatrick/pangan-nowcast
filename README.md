@@ -179,11 +179,13 @@ Rolling-origin, `--min-train 30`, tiap prediksi hanya memakai data sebelum bulan
 | `food_mtm` (makanan m-to-m) | 0 | naive | 48 | 0.981 | 1.288 |
 | `food_mtm` | 0 | AR(1) | 48 | 0.795 | 0.989 |
 | `food_mtm` | 0 | AR(1)+harga | 48 | 0.714 | **0.880** |
-| `food_mtm` | 0 | AR(1)+headline | 48 | **0.594** | 0.910 |
+| `food_mtm` | 0 | AR(1)+headline | 48 | 0.594 | 0.910 |
+| `food_mtm` | 0 | AR(1)+headline+harga | 48 | **0.560** | **0.836** |
 | `food_mtm` | 1 | naive | 47 | 0.987 | 1.297 |
 | `food_mtm` | 1 | AR(1) | 47 | 0.784 | 0.981 |
 | `food_mtm` | 1 | AR(1)+harga | 47 | 0.771 | 0.938 |
 | `food_mtm` | 1 | AR(1)+headline | 47 | 0.800 | 1.046 |
+| `food_mtm` | 1 | AR(1)+headline+harga | 47 | 0.783 | 0.997 |
 | `rokok_mtm` (kontrol negatif) | 0 | naive | 48 | 0.189 | 0.284 |
 | `rokok_mtm` | 0 | AR(1) | 48 | 0.185 | 0.278 |
 | `rokok_mtm` | 0 | AR(1)+harga | 48 | 0.183 | 0.279 |
@@ -201,17 +203,30 @@ Selisih MAE fitur harga, bootstrap 5.000 resample:
 - `food_mtm` horizon 0 vs naive: **-0.268** [-0.436, -0.107]
 - `food_mtm` horizon 0 vs AR(1)+headline: +0.119 [-0.074, +0.292]
 - `food_mtm` horizon 1 vs AR(1)+headline: -0.029 [-0.135, +0.053]
+
+Uji utama memakai model bersarang (bukan dua model terpisah):
+`AR(1)+headline+harga` vs `AR(1)+headline`, dengan Diebold-Mariano
+(Newey-West, lag = 4·(n/100)^(2/9)):
+
+| horizon | selisih MAE | DM | p | n |
+|---|---|---|---|---|
+| 0 | -0.035 | -1.77 | 0.077 | 48 |
+| 1 | -0.018 | -0.70 | 0.486 | 47 |
+
+Sebagai pembanding, DM untuk `AR(1)+harga` vs `AR(1)`: horizon 0 = -2.90
+(p=0.004), horizon 1 = -0.47 (p=0.639). DM `harga - headline`: horizon 0 = +1.39
+(p=0.166), horizon 1 = -0.60 (p=0.551).
 - `cpi_yoy` horizon 0 vs AR(1): -0.001 [-0.019, +0.017]
 - `rokok_mtm` kontrol vs AR(1): -0.002 [-0.009, +0.005]
 - `minuman_mtm` kontrol vs AR(1): +0.002 [+0.000, +0.004]
 - `alkohol_mtm` kontrol vs AR(1): +0.001 [-0.010, +0.011]
 
 Kesimpulan: harga pangan harian menambah akurasi dibanding naive dan AR(1)
-untuk **nowcast** inflasi makanan m-to-m. Namun dibandingkan model yang sudah
-memakai inflasi umum bulanan resmi BPS (`AR(1)+headline`), tambahannya **tidak
-signifikan**: selisih MAE +0.119 (95% CI -0.074 s/d +0.292) untuk nowcast, dan
--0.029 (95% CI -0.135 s/d +0.053) untuk forecast satu bulan. Titik estimasi MAE
-AR(1)+headline justru lebih rendah pada nowcast (0.594 vs 0.714).
+untuk **nowcast** inflasi makanan m-to-m, dan itu bertahan di DM (p=0.004).
+Namun uji yang menentukan adalah uji bersarang terhadap inflasi umum resmi:
+menambahkan fitur harga ke `AR(1)+headline` hanya menurunkan MAE 0.035 dengan
+DM -1.77 (p=0.077). Arahnya konsisten, tapi **belum signifikan pada 5%**.
+Untuk horizon 1, tambahannya -0.018 (p=0.486), praktis nol.
 
 Untuk forecast satu bulan ke depan, tambahan fitur harga tidak signifikan baik
 dibanding AR(1) maupun headline. Untuk inflasi umum YoY, tidak ada tambahan sama
@@ -232,7 +247,8 @@ bervarians besar.
 Batasan: 48 bulan uji, target disambung antar dua basis IHK, fitur masih rata-rata
 sederhana tanpa bobot konsumsi, dan satu kali spesifikasi (tanpa tuning). Fitur
 memakai harga sepanjang bulan, jadi ini nowcast akhir bulan (CPI belum rilis),
-bukan prediksi sebelum bulan berjalan.
+bukan prediksi sebelum bulan berjalan. Backtest memakai nilai final, bukan vintage
+rilis pertama, sehingga revisi BPS/PIHPS belum tercermin.
 
 Catatan pembanding `headline_mtm`: nilainya dirilis BPS bersamaan dengan target
 `food_mtm` (awal bulan berikutnya), jadi model `AR(1)+headline` **bukan** nowcast
