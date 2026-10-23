@@ -74,11 +74,33 @@ Untuk m-to-m per kelompok, pakai BPS WebAPI (butuh API key gratis).
 
 Hormati sumbernya: `--sleep 1` default, jangan jalankan paralel.
 
+## Hasil backtest
+
+`pangan backtest --min-train 30` — rolling-origin, 31 bulan uji (2022-10 s/d 2025-04).
+Tiap prediksi hanya memakai data sebelum bulan uji.
+
+```
+naive        n= 31  MAE=0.361  RMSE=0.465  bias=-0.129
+AR(1)+harga  n= 31  MAE=0.398  RMSE=0.511  bias=-0.182
+selisih MAE (harga - naive): +0.036  95% CI [-0.005, +0.086]
+```
+
+Kesimpulan: fitur harga pangan **tidak** memperbaiki nowcast inflasi umum YoY.
+Selisih tidak signifikan (CI memuat 0) dan arahnya lebih buruk dari baseline.
+Dugaan penyebab: target YoY halus dan didominasi inersia, sementara fitur hanya
+momentum satu bulan dari rata-rata komoditas tanpa bobot.
+
+Tidak ada varian fitur/model yang dicoba setelah melihat hasil ini, supaya tidak
+terjadi p-hacking. Kandidat berikutnya harus ditetapkan sebelum dijalankan:
+target m-to-m atau kelompok makanan (butuh BPS), indeks harga berbobot, dan
+perbandingan horizon 0 vs 1 bulan.
+
 ## Selanjutnya
 
-1. Backtest rolling-origin: baseline AR vs AR + fitur harga (2020-2025).
-2. Ganti target ke inflasi kelompok makanan begitu akses BPS tersedia.
-3. Dashboard + laporan.
+1. Target m-to-m / kelompok makanan via BPS WebAPI (API key gratis).
+2. Fitur indeks harga pangan berbobot konsumsi, bukan rata-rata sederhana.
+3. Uji horizon 1 bulan (forecast, bukan nowcast).
+4. Dashboard + laporan.
 
 ## Test
 
