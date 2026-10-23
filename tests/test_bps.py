@@ -63,8 +63,9 @@ def test_month_from_label():
     assert bps.month_from_label("Tahun") is None
 
 
-def test_missing_key_raises(monkeypatch):
+def test_missing_key_raises(monkeypatch, tmp_path):
     monkeypatch.delenv(bps.ENV_KEY, raising=False)
+    monkeypatch.chdir(tmp_path)
     with pytest.raises(bps.BpsError, match=bps.ENV_KEY):
         bps.api_key()
 
