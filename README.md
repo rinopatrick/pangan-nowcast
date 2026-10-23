@@ -166,6 +166,10 @@ dipengaruhi harga beras/cabai/daging — tidak berubah (-0.002, CI memuat 0).
 Artinya perbaikan di `food_mtm` bukan artefak dari pipeline atau overfitting
 fitur, tapi spesifik ke kelompok yang harganya memang kita pantau.
 
+Catatan daya uji: varians rokok jauh lebih kecil (MAE AR 0,185 vs 0,795 untuk
+makanan), jadi ruang perbaikan di sana memang sempit. Hasil null ini konsisten
+dengan kontrol yang valid, tapi bukan bukti sekuat uji pada target bervarians besar.
+
 Batasan: 48 bulan uji, target disambung antar dua basis IHK, fitur masih rata-rata
 sederhana tanpa bobot konsumsi, dan satu kali spesifikasi (tanpa tuning). Fitur
 memakai harga sepanjang bulan, jadi ini nowcast akhir bulan (CPI belum rilis),
