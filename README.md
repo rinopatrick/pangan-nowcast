@@ -75,6 +75,25 @@ Catatan: adapter BPS baru diuji terhadap bentuk respons di dokumentasi resmi,
 belum terhadap panggilan live (butuh key). Id variabel di atas contoh; cek
 dengan `bps-vars`.
 
+### Tanpa API key?
+
+WebAPI BPS memang mewajibkan key (gratis). Tapi halaman tabel statistik
+menyertakan payload data yang sama di dalam respons Next.js: kirim header
+`RSC: 1` ke URL tabel, lalu cari baris yang memuat `"datacontent"`.
+
+Yang sudah diverifikasi pada tabel di atas:
+
+- `var` 2223 = Inflasi Bulanan (M-to-M) (2022=100) Makanan, Minuman dan Tembakau
+- `turvar` 1551 = Makanan, Minuman dan Tembakau; 1552 = Makanan;
+  1553 = Minuman tidak beralkohol; 1554 = Minuman beralkohol; 1666 = Rokok
+- `vervar` 1..150 = kabupaten/kota, **151 = INDONESIA**
+- 5.652 titik data, `turtahun` Januari-Desember + Tahunan
+
+Batasan: halaman hanya menyajikan tahun yang sedang dipilih (saat ini 2026).
+Tombol ganti tahun memakai aksi internal Next.js yang tidak bisa direplikasi
+lewat GET biasa (10 variasi parameter sudah dicoba). Jadi riwayat 2020-2025
+praktis butuh API key.
+
 ## Sumber data
 
 Endpoint `bi.go.id/hargapangan/WebSite/TabelHarga/GetGridDataKomoditas`.
