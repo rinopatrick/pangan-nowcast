@@ -42,3 +42,8 @@ def test_macro_parse_csv_skips_missing():
         ("CPALTT01IDM659N", "2024-01", 0.57),
         ("CPALTT01IDM659N", "2024-03", 0.52),
     ]
+
+
+def test_build_dataset_custom_target_name():
+    rows = features.build_dataset([("com_1", "2024-01-02", 100.0)], {"2024-01": 1.2}, "food_mtm")
+    assert rows[0]["food_mtm"] == 1.2

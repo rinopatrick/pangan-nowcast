@@ -54,6 +54,27 @@ pangan dataset --out data/dataset.csv
 | `mom_pct` | perubahan `last` vs bulan sebelumnya, persen |
 | `cpi_yoy` | inflasi umum nasional year-on-year (persen) |
 
+## Target BPS (m-to-m / kelompok makanan)
+
+FRED hanya menyediakan YoY. Untuk m-to-m per kelompok, pakai BPS WebAPI.
+
+```bash
+export BPS_API_KEY=...          # Windows: setx BPS_API_KEY "..." lalu buka shell baru
+pangan bps-vars --page 1        # cari variabel "Inflasi Bulanan (M-to-M)"
+pangan bps-vars --subject 22    # kalau sudah tahu id subjek
+pangan bps-pull --var 2223 --series food_mtm --turvar "Makanan, Minuman dan Tembakau"
+
+pangan dataset --target-series food_mtm --target-name food_mtm --out data/dataset_food.csv
+pangan backtest --dataset data/dataset_food.csv --target food_mtm
+```
+
+Daftar API key gratis di https://webapi.bps.go.id/developer/. `bps-pull` akan
+mencetak kombinasi `--vervar`/`--turvar` yang tersedia kalau filter tidak cocok.
+
+Catatan: adapter BPS baru diuji terhadap bentuk respons di dokumentasi resmi,
+belum terhadap panggilan live (butuh key). Id variabel di atas contoh; cek
+dengan `bps-vars`.
+
 ## Sumber data
 
 Endpoint `bi.go.id/hargapangan/WebSite/TabelHarga/GetGridDataKomoditas`.

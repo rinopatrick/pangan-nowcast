@@ -44,9 +44,11 @@ def monthly(prices: list[tuple[str, str, float | None]]) -> dict[tuple[str, str]
 
 
 def build_dataset(
-    prices: list[tuple[str, str, float | None]], cpi: dict[str, float]
+    prices: list[tuple[str, str, float | None]], target: dict[str, float], target_name: str = "cpi_yoy"
 ) -> list[dict]:
     rows = []
     for (commodity_id, month), feats in sorted(monthly(prices).items()):
-        rows.append({"month": month, "commodity_id": commodity_id, **feats, "cpi_yoy": cpi.get(month)})
+        rows.append(
+            {"month": month, "commodity_id": commodity_id, **feats, target_name: target.get(month)}
+        )
     return rows
