@@ -47,3 +47,11 @@ def test_store_is_idempotent(tmp_path):
         "SELECT value FROM price WHERE province = 'Aceh' AND date = '2024-01-02'"
     ).fetchone()[0]
     assert value == 13750.0
+
+
+def test_year_chunks():
+    assert pihps.year_chunks("2023-06-01", "2024-02-29") == [
+        ("2023-06-01", "2023-12-31"),
+        ("2024-01-01", "2024-02-29"),
+    ]
+    assert pihps.year_chunks("2024-01-01", "2024-12-31") == [("2024-01-01", "2024-12-31")]

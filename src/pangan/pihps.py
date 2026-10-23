@@ -33,7 +33,7 @@ def _get(path: str, **params) -> object:
     last: Exception | None = None
     for attempt in range(3):
         try:
-            r = requests.get(f"{BASE}/{path}", params=params, headers=HEADERS, timeout=60)
+            r = requests.get(f"{BASE}/{path}", params=params, headers=HEADERS, timeout=120)
             r.raise_for_status()
             return r.json()
         except (requests.RequestException, ValueError) as exc:
@@ -74,6 +74,17 @@ def grid(
         start_date=start,
         end_date=end,
     )
+
+
+def year_chunks(start: str, end: str) -> list[tuple[str, str]]:
+    """Pecah rentang per tahun kalender supaya tiap permintaan tetap cepat."""
+    first, last = int(start[:4]), int(end[:4])
+    chunks = []
+    for year in range(first, last + 1):
+        lo = start if year == first else f"{year}-01-01"
+        hi = end if year == last else f"{year}-12-31"
+        chunks.append((lo, hi))
+    return chunks
 
 
 def parse_value(raw: object) -> float | None:
