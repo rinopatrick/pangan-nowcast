@@ -74,7 +74,7 @@ def _cmd_bps_vars(args: argparse.Namespace) -> int:
 def _cmd_bps_pull(args: argparse.Namespace) -> int:
     con = store.connect(args.db)
     store.init(con)
-    payload = bps.fetch_data(args.var)
+    payload = bps.fetch_data(args.var, th=args.th)
     rows = bps.monthly_series(payload, vervar=args.vervar, turvar=args.turvar)
     if not rows:
         combos = sorted({(r["vervar"], r["turvar"]) for r in bps.parse_rows(payload)})
@@ -125,7 +125,11 @@ def _cmd_backtest(args: argparse.Namespace) -> int:
     if not rows:
         print("data tidak cukup untuk backtest", file=sys.stderr)
         return 1
-    for label, key in [("naive", "pred_base"), ("AR(1)+harga", "pred_feat")]:
+    for label, key in [
+        ("naive", "pred_base"),
+        ("AR(1)", "pred_ar"),
+        ("AR(1)+harga", "pred_feat"),
+    ]:
         m = backtest.metrics(rows, key)
         print(
             f"{label:12s} n={m['n']:3d}  MAE={m['mae']:.3f}  "
@@ -136,7 +140,12 @@ def _cmd_backtest(args: argparse.Namespace) -> int:
         f"selisih MAE (harga - naive): {ci['diff']:+.3f}  "
         f"95% CI [{ci['lo']:+.3f}, {ci['hi']:+.3f}]"
     )
-    fields = ["month", "y", "pred_base", "pred_feat", "n_train"]
+    ci_ar = backtest.mae_diff_ci(rows, base="pred_ar")
+    print(
+        f"selisih MAE (harga - AR):    {ci_ar['diff']:+.3f}  "
+        f"95% CI [{ci_ar['lo']:+.3f}, {ci_ar['hi']:+.3f}]"
+    )
+    fields = ["month", "y", "pred_base", "pred_ar", "pred_feat", "n_train"]
     with open(args.out, "w", newline="", encoding="utf-8") as fh:
         writer = csv.DictWriter(fh, fieldnames=fields, extrasaction="ignore")
         writer.writeheader()
@@ -174,6 +183,7 @@ def main(argv: list[str] | None = None) -> int:
 
     bps_pull = sub.add_parser("bps-pull", help="unduh satu variabel BPS -> tabel macro")
     bps_pull.add_argument("--var", type=int, required=True)
+    bps_pull.add_argument("--th", required=True, help="periode BPS: 126, atau rentang 120:126")
     bps_pull.add_argument("--series", required=True, help="nama seri di tabel macro, mis. food_mtm")
     bps_pull.add_argument("--vervar", default="INDONESIA")
     bps_pull.add_argument("--turvar", help="label turvar, mis. 'Makanan, Minuman dan Tembakau'")

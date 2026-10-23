@@ -83,9 +83,12 @@ def list_vars(subject: int | None = None, page: int = 1, domain: str = "0000") -
     return _get("/".join(parts))
 
 
-def fetch_data(var_id: int, domain: str = "0000") -> dict:
-    """Ambil semua kombinasi untuk satu variabel (tanpa filter vervar/tahun)."""
-    parts = ["list", "model", "data", "domain", domain, "var", str(var_id), "key", api_key()]
+def fetch_data(var_id: int, domain: str = "0000", th: str | None = None) -> dict:
+    """Ambil satu variabel. `th` wajib diisi BPS: mis. "126" atau "120:126"."""
+    parts = ["list", "model", "data", "domain", domain, "var", str(var_id)]
+    if th:
+        parts += ["th", str(th)]
+    parts += ["key", api_key()]
     return _get("/".join(parts))
 
 

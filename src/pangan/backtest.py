@@ -81,6 +81,7 @@ def rolling(
                 "month": row["month"],
                 "y": row[target],
                 "pred_base": row["y_lag1"],
+                "pred_ar": _fit_predict(train, row, [], target),
                 "pred_feat": _fit_predict(train, row, cols, target),
                 "n_train": len(train),
             }

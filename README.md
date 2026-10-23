@@ -54,26 +54,33 @@ pangan dataset --out data/dataset.csv
 | `mom_pct` | perubahan `last` vs bulan sebelumnya, persen |
 | `cpi_yoy` | inflasi umum nasional year-on-year (persen) |
 
-## Target BPS (m-to-m / kelompok makanan)
+## Target BPS (m-to-m kelompok makanan)
 
-FRED hanya menyediakan YoY. Untuk m-to-m per kelompok, pakai BPS WebAPI.
+FRED hanya menyediakan YoY. Target m-to-m kelompok makanan diambil dari BPS
+WebAPI: `var` 1890 (basis 2018=100, 2020-2023) dan `var` 2223 (basis 2022=100,
+2024-2026), baris nasional (`vervar` = `INDONESIA`, `turvar` = `Makanan`).
 
 ```bash
-export BPS_API_KEY=...          # Windows: setx BPS_API_KEY "..." lalu buka shell baru
-pangan bps-vars --page 1        # cari variabel "Inflasi Bulanan (M-to-M)"
-pangan bps-vars --subject 22    # kalau sudah tahu id subjek
-pangan bps-pull --var 2223 --series food_mtm --turvar "Makanan, Minuman dan Tembakau"
+export BPS_API_KEY=...
 
-pangan dataset --target-series food_mtm --target-name food_mtm --out data/dataset_food.csv
-pangan backtest --dataset data/dataset_food.csv --target food_mtm
+pangan bps-pull --var 1890 --th 120:122 --series food_mtm --turvar Makanan
+pangan bps-pull --var 1890 --th 123     --series food_mtm --turvar Makanan
+pangan bps-pull --var 2223 --th 123:125 --series food_mtm --turvar Makanan
+pangan bps-pull --var 2223 --th 126     --series food_mtm --turvar Makanan
 ```
 
-Daftar API key gratis di https://webapi.bps.go.id/developer/. `bps-pull` akan
-mencetak kombinasi `--vervar`/`--turvar` yang tersedia kalau filter tidak cocok.
+- `--th` wajib diisi BPS; maksimal 3 tahun per permintaan. Id periode: 100 = 2000,
+  126 = 2026, jadi 120:122 = 2020-2022.
+- Hasil: 81 bulan, 2020-01 s/d 2026-09, tanpa bulan hilang.
+- Dua basis IHK disambung di 2024. m-to-m adalah persen perubahan bulanan,
+  jadi tetap sebanding antar basis; tidak ada penyesuaian level. Ini asumsi yang
+  perlu diingat kalau angkanya dipakai untuk klaim jangka panjang.
+- Nilai masuk akal: rentang -2,35% s/d +2,30%; YoY implisit 2022 = 5,7%,
+  2023 = 6,2%, 2024 = 1,0%, 2025 = 4,9%.
 
-Catatan: adapter BPS baru diuji terhadap bentuk respons di dokumentasi resmi,
-belum terhadap panggilan live (butuh key). Id variabel di atas contoh; cek
-dengan `bps-vars`.
+Daftar key gratis di https://webapi.bps.go.id/developer/. Id subjek inflasi = 3.
+`bps-pull` mencetak kombinasi `--vervar`/`--turvar` yang tersedia kalau filter
+tidak cocok. Adapter sudah diuji terhadap panggilan live.
 
 ### Tanpa API key?
 
@@ -116,30 +123,38 @@ Hormati sumbernya: `--sleep 1` default, jangan jalankan paralel.
 
 ## Hasil backtest
 
-`pangan backtest --min-train 30` — rolling-origin, 31 bulan uji (2022-10 s/d 2025-04).
-Tiap prediksi hanya memakai data sebelum bulan uji.
+Rolling-origin, `--min-train 30`, tiap prediksi hanya memakai data sebelum bulan uji.
+Nowcast, bukan ramalan: harga bulan t diketahui pada akhir bulan t, CPI rilis awal t+1.
 
-```
-naive        n= 31  MAE=0.361  RMSE=0.465  bias=-0.129
-AR(1)+harga  n= 31  MAE=0.398  RMSE=0.511  bias=-0.182
-selisih MAE (harga - naive): +0.036  95% CI [-0.005, +0.086]
-```
+| target | model | n | MAE | RMSE |
+|---|---|---|---|---|
+| `cpi_yoy` (inflasi umum YoY) | naive | 31 | 0.361 | 0.465 |
+| `cpi_yoy` | AR(1) | 31 | 0.398 | 0.506 |
+| `cpi_yoy` | AR(1)+harga | 31 | 0.398 | 0.511 |
+| `food_mtm` (makanan m-to-m) | naive | 48 | 0.981 | 1.288 |
+| `food_mtm` | AR(1) | 48 | 0.795 | 0.989 |
+| `food_mtm` | AR(1)+harga | 48 | 0.714 | 0.880 |
 
-Kesimpulan: fitur harga pangan **tidak** memperbaiki nowcast inflasi umum YoY.
-Selisih tidak signifikan (CI memuat 0) dan arahnya lebih buruk dari baseline.
-Dugaan penyebab: target YoY halus dan didominasi inersia, sementara fitur hanya
-momentum satu bulan dari rata-rata komoditas tanpa bobot.
+Selisih MAE fitur harga, bootstrap 5.000 resample:
 
-Tidak ada varian fitur/model yang dicoba setelah melihat hasil ini, supaya tidak
-terjadi p-hacking. Kandidat berikutnya harus ditetapkan sebelum dijalankan:
-target m-to-m atau kelompok makanan (butuh BPS), indeks harga berbobot, dan
-perbandingan horizon 0 vs 1 bulan.
+- `food_mtm` vs naive: **-0.268** [-0.436, -0.107]
+- `food_mtm` vs AR(1): **-0.082** [-0.147, -0.017]
+- `cpi_yoy` vs AR(1): -0.001 [-0.019, +0.017]
+
+Kesimpulan: harga pangan harian menambah akurasi untuk nowcast **inflasi makanan
+m-to-m**, dan selisihnya tetap signifikan setelah inersia AR(1) dikontrol. Untuk
+inflasi umum YoY, fitur harga tidak menambah apa pun.
+
+Batasan: 48 bulan uji, target disambung antar dua basis IHK, fitur masih rata-rata
+sederhana tanpa bobot konsumsi, dan satu kali spesifikasi (tanpa tuning). Fitur
+memakai harga sepanjang bulan, jadi ini nowcast akhir bulan (CPI belum rilis),
+bukan prediksi sebelum bulan berjalan.
 
 ## Selanjutnya
 
-1. Target m-to-m / kelompok makanan via BPS WebAPI (API key gratis).
-2. Fitur indeks harga pangan berbobot konsumsi, bukan rata-rata sederhana.
-3. Uji horizon 1 bulan (forecast, bukan nowcast).
+1. Fitur indeks harga pangan berbobot konsumsi, bukan rata-rata sederhana.
+2. Uji horizon 1 bulan (forecast, bukan nowcast).
+3. Bandingkan target kelompok lain (minuman, rokok) sebagai kontrol negatif.
 4. Dashboard + laporan.
 
 ## Test
