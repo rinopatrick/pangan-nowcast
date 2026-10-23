@@ -9,3 +9,4 @@ data/
 *.db-shm
 
 report.html
+ingest.log
