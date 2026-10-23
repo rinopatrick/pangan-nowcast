@@ -6,8 +6,9 @@ import argparse
 import csv
 import sys
 import time
+from pathlib import Path
 
-from . import backtest, bps, features, macro, pihps, store
+from . import backtest, bps, features, macro, pihps, report, store
 
 
 def _cmd_refs(db: str) -> int:
@@ -155,6 +156,20 @@ def _cmd_backtest(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_report(args: argparse.Namespace) -> int:
+    panel = backtest.load_dataset(args.dataset, target=args.target, horizon=args.horizon)
+    rows = backtest.rolling(panel, min_train=args.min_train)
+    if not rows:
+        print("data tidak cukup untuk laporan", file=sys.stderr)
+        return 1
+    html = report.build_report(
+        rows, args.target, args.horizon, args.dataset, args.min_train
+    )
+    Path(args.out).write_text(html, encoding="utf-8")
+    print(f"laporan: {len(rows)} bulan -> {args.out}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="pangan", description="Harga pangan harian PIHPS -> SQLite")
     parser.add_argument("--db", default="data/pangan.db")
@@ -201,6 +216,13 @@ def main(argv: list[str] | None = None) -> int:
     bt.add_argument("--min-train", type=int, default=30)
     bt.add_argument("--out", default="data/backtest.csv")
 
+    rp = sub.add_parser("report", help="laporan HTML mandiri (tabel + grafik)")
+    rp.add_argument("--dataset", default="data/dataset_food.csv")
+    rp.add_argument("--target", default="food_mtm")
+    rp.add_argument("--horizon", type=int, default=0, choices=[0, 1])
+    rp.add_argument("--min-train", type=int, default=30)
+    rp.add_argument("--out", default="report.html")
+
     args = parser.parse_args(argv)
     try:
         if args.cmd == "refs":
@@ -215,6 +237,8 @@ def main(argv: list[str] | None = None) -> int:
             return _cmd_dataset(args)
         if args.cmd == "backtest":
             return _cmd_backtest(args)
+        if args.cmd == "report":
+            return _cmd_report(args)
         return _cmd_ingest(args)
     except (bps.BpsError, pihps.PihpsError) as exc:
         print(f"error: {exc}", file=sys.stderr)
