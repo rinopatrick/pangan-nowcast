@@ -67,3 +67,17 @@ def test_missing_key_raises(monkeypatch):
     monkeypatch.delenv(bps.ENV_KEY, raising=False)
     with pytest.raises(bps.BpsError, match=bps.ENV_KEY):
         bps.api_key()
+
+
+def test_dotenv_fallback(monkeypatch, tmp_path):
+    monkeypatch.delenv(bps.ENV_KEY, raising=False)
+    (tmp_path / ".env").write_text("BPS_API_KEY=abc123\n", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+    assert bps.api_key() == "abc123"
+
+
+def test_env_var_wins_over_dotenv(monkeypatch, tmp_path):
+    (tmp_path / ".env").write_text("BPS_API_KEY=fromfile\n", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv(bps.ENV_KEY, "fromenv")
+    assert bps.api_key() == "fromenv"

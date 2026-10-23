@@ -11,6 +11,7 @@ vervar + var + turvar + tahun + turtahun.
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 import requests
 
@@ -37,12 +38,29 @@ class BpsError(RuntimeError):
     pass
 
 
+def _read_dotenv(path: str | Path = ".env") -> dict[str, str]:
+    """Baca KEY=VALUE sederhana. Baris kosong dan komentar diabaikan."""
+    values = {}
+    file = Path(path)
+    if not file.is_file():
+        return values
+    for line in file.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        name, value = line.split("=", 1)
+        values[name.strip()] = value.strip().strip('"').strip("'")
+    return values
+
+
 def api_key() -> str:
     key = os.environ.get(ENV_KEY, "").strip()
     if not key:
+        key = _read_dotenv().get(ENV_KEY, "").strip()
+    if not key:
         raise BpsError(
             f"{ENV_KEY} belum diset. Daftar gratis di https://webapi.bps.go.id/developer/, "
-            f"lalu set environment variable {ENV_KEY}."
+            f"lalu set environment variable {ENV_KEY} atau taruh di file .env."
         )
     return key
 
