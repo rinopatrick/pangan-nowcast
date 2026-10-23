@@ -67,6 +67,12 @@ pangan bps-pull --var 1890 --th 120:122 --series food_mtm --turvar Makanan
 pangan bps-pull --var 1890 --th 123     --series food_mtm --turvar Makanan
 pangan bps-pull --var 2223 --th 123:125 --series food_mtm --turvar Makanan
 pangan bps-pull --var 2223 --th 126     --series food_mtm --turvar Makanan
+
+# kontrol negatif: kelompok yang tidak terkait harga pangan
+pangan bps-pull --var 1890 --th 120:122 --series rokok_mtm --turvar "Rokok dan Tembakau"
+pangan bps-pull --var 1890 --th 123     --series rokok_mtm --turvar "Rokok dan Tembakau"
+pangan bps-pull --var 2223 --th 123:125 --series rokok_mtm --turvar "Rokok dan Tembakau"
+pangan bps-pull --var 2223 --th 126     --series rokok_mtm --turvar "Rokok dan Tembakau"
 ```
 
 - `--th` wajib diisi BPS; maksimal 3 tahun per permintaan. Id periode: 100 = 2000,
@@ -138,6 +144,9 @@ Rolling-origin, `--min-train 30`, tiap prediksi hanya memakai data sebelum bulan
 | `food_mtm` | 1 | naive | 47 | 0.987 | 1.297 |
 | `food_mtm` | 1 | AR(1) | 47 | 0.784 | 0.981 |
 | `food_mtm` | 1 | AR(1)+harga | 47 | 0.771 | 0.938 |
+| `rokok_mtm` (kontrol negatif) | 0 | naive | 48 | 0.189 | 0.284 |
+| `rokok_mtm` | 0 | AR(1) | 48 | 0.185 | 0.278 |
+| `rokok_mtm` | 0 | AR(1)+harga | 48 | 0.183 | 0.279 |
 
 Selisih MAE fitur harga, bootstrap 5.000 resample:
 
@@ -145,11 +154,17 @@ Selisih MAE fitur harga, bootstrap 5.000 resample:
 - `food_mtm` horizon 1 vs AR(1): -0.013 [-0.064, +0.038]
 - `food_mtm` horizon 0 vs naive: **-0.268** [-0.436, -0.107]
 - `cpi_yoy` horizon 0 vs AR(1): -0.001 [-0.019, +0.017]
+- `rokok_mtm` kontrol vs AR(1): -0.002 [-0.009, +0.005]
 
 Kesimpulan: harga pangan harian menambah akurasi untuk **nowcast** inflasi makanan
 m-to-m, dan tetap signifikan setelah inersia AR(1) dikontrol. Untuk forecast satu
 bulan ke depan, tambahannya tidak signifikan. Untuk inflasi umum YoY, tidak ada
 tambahan sama sekali. Sinyal harga pangan bersifat kontemporer, bukan prediktif.
+
+Kontrol negatif: target `rokok_mtm` (Rokok dan Tembakau) — kelompok yang tidak
+dipengaruhi harga beras/cabai/daging — tidak berubah (-0.002, CI memuat 0).
+Artinya perbaikan di `food_mtm` bukan artefak dari pipeline atau overfitting
+fitur, tapi spesifik ke kelompok yang harganya memang kita pantau.
 
 Batasan: 48 bulan uji, target disambung antar dua basis IHK, fitur masih rata-rata
 sederhana tanpa bobot konsumsi, dan satu kali spesifikasi (tanpa tuning). Fitur
@@ -158,8 +173,8 @@ bukan prediksi sebelum bulan berjalan.
 
 ## Selanjutnya
 
-1. Kontrol negatif: target kelompok lain (minuman, rokok) yang tidak terkait
-   harga pangan yang kita pantau.
+1. Kontrol kedua: `Minuman Beralkohol` atau `Minuman Tidak Beralkohol`, untuk
+   memastikan hasil kontrol pertama bukan kebetulan.
 2. Indeks harga berbobot konsumsi. Terblokir: bobot per komoditas tidak tersedia
    sebagai variabel WebAPI (sudah dicek), jadi perlu Diagram Timbang dari publikasi
    BPS (PDF/Excel) dan pemetaan komoditas PIHPS ke komoditas IHK.
