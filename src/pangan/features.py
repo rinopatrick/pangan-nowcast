@@ -47,11 +47,22 @@ def monthly(prices: list[tuple[str, str, float | None]]) -> dict[tuple[str, str]
 
 
 def build_dataset(
-    prices: list[tuple[str, str, float | None]], target: dict[str, float], target_name: str = "cpi_yoy"
+    prices: list[tuple[str, str, float | None]],
+    target: dict[str, float],
+    target_name: str = "cpi_yoy",
+    extras: dict[str, dict[str, float]] | None = None,
 ) -> list[dict]:
+    """`extras` = {nama kolom: {month: nilai}}. Nilai hilang menjadi None."""
+    extras = extras or {}
     rows = []
     for (commodity_id, month), feats in sorted(monthly(prices).items()):
         rows.append(
-            {"month": month, "commodity_id": commodity_id, **feats, target_name: target.get(month)}
+            {
+                "month": month,
+                "commodity_id": commodity_id,
+                **feats,
+                target_name: target.get(month),
+                **{name: values.get(month) for name, values in extras.items()},
+            }
         )
     return rows

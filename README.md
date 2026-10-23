@@ -54,6 +54,14 @@ pangan dataset --out data/dataset.csv
 | `mom_pct` | perubahan `last` vs bulan sebelumnya, persen |
 | `cpi_yoy` | inflasi umum nasional year-on-year (persen) |
 
+Kolom tambahan lewat `--extra NAME=SERIES`, misalnya pembanding inflasi umum
+bulanan resmi BPS untuk target makanan:
+
+```bash
+pangan dataset --target-series food_mtm --target-name food_mtm \
+  --extra headline_mtm=bps_headline_mtm --out data/dataset_food.csv
+```
+
 ## Target BPS (m-to-m kelompok makanan)
 
 FRED hanya menyediakan YoY. Target m-to-m kelompok makanan diambil dari BPS
@@ -73,6 +81,11 @@ pangan bps-pull --var 1890 --th 120:122 --series rokok_mtm --turvar "Rokok dan T
 pangan bps-pull --var 1890 --th 123     --series rokok_mtm --turvar "Rokok dan Tembakau"
 pangan bps-pull --var 2223 --th 123:125 --series rokok_mtm --turvar "Rokok dan Tembakau"
 pangan bps-pull --var 2223 --th 126     --series rokok_mtm --turvar "Rokok dan Tembakau"
+
+# pembanding: inflasi umum m-to-m nasional (80+ bulan, lengkap)
+pangan bps-pull --var 1 --th 120:122 --series bps_headline_mtm
+pangan bps-pull --var 1 --th 123:125 --series bps_headline_mtm
+pangan bps-pull --var 1 --th 126     --series bps_headline_mtm
 ```
 
 - `--th` wajib diisi BPS; maksimal 3 tahun per permintaan. Id periode: 100 = 2000,
@@ -151,10 +164,12 @@ Rolling-origin, `--min-train 30`, tiap prediksi hanya memakai data sebelum bulan
 | `cpi_yoy` | 0 | AR(1)+harga | 31 | 0.398 | 0.511 |
 | `food_mtm` (makanan m-to-m) | 0 | naive | 48 | 0.981 | 1.288 |
 | `food_mtm` | 0 | AR(1) | 48 | 0.795 | 0.989 |
-| `food_mtm` | 0 | AR(1)+harga | 48 | **0.714** | **0.880** |
+| `food_mtm` | 0 | AR(1)+harga | 48 | 0.714 | **0.880** |
+| `food_mtm` | 0 | AR(1)+headline | 48 | **0.594** | 0.910 |
 | `food_mtm` | 1 | naive | 47 | 0.987 | 1.297 |
 | `food_mtm` | 1 | AR(1) | 47 | 0.784 | 0.981 |
 | `food_mtm` | 1 | AR(1)+harga | 47 | 0.771 | 0.938 |
+| `food_mtm` | 1 | AR(1)+headline | 47 | 0.800 | 1.046 |
 | `rokok_mtm` (kontrol negatif) | 0 | naive | 48 | 0.189 | 0.284 |
 | `rokok_mtm` | 0 | AR(1) | 48 | 0.185 | 0.278 |
 | `rokok_mtm` | 0 | AR(1)+harga | 48 | 0.183 | 0.279 |
@@ -170,15 +185,24 @@ Selisih MAE fitur harga, bootstrap 5.000 resample:
 - `food_mtm` horizon 0 vs AR(1): **-0.082** [-0.147, -0.017]
 - `food_mtm` horizon 1 vs AR(1): -0.013 [-0.064, +0.038]
 - `food_mtm` horizon 0 vs naive: **-0.268** [-0.436, -0.107]
+- `food_mtm` horizon 0 vs AR(1)+headline: +0.119 [-0.074, +0.292]
+- `food_mtm` horizon 1 vs AR(1)+headline: -0.029 [-0.135, +0.053]
 - `cpi_yoy` horizon 0 vs AR(1): -0.001 [-0.019, +0.017]
 - `rokok_mtm` kontrol vs AR(1): -0.002 [-0.009, +0.005]
 - `minuman_mtm` kontrol vs AR(1): +0.002 [+0.000, +0.004]
 - `alkohol_mtm` kontrol vs AR(1): +0.001 [-0.010, +0.011]
 
-Kesimpulan: harga pangan harian menambah akurasi untuk **nowcast** inflasi makanan
-m-to-m, dan tetap signifikan setelah inersia AR(1) dikontrol. Untuk forecast satu
-bulan ke depan, tambahannya tidak signifikan. Untuk inflasi umum YoY, tidak ada
-tambahan sama sekali. Sinyal harga pangan bersifat kontemporer, bukan prediktif.
+Kesimpulan: harga pangan harian menambah akurasi dibanding naive dan AR(1)
+untuk **nowcast** inflasi makanan m-to-m. Namun dibandingkan model yang sudah
+memakai inflasi umum bulanan resmi BPS (`AR(1)+headline`), tambahannya **tidak
+signifikan**: selisih MAE +0.119 (95% CI -0.074 s/d +0.292) untuk nowcast, dan
+-0.029 (95% CI -0.135 s/d +0.053) untuk forecast satu bulan. Titik estimasi MAE
+AR(1)+headline justru lebih rendah pada nowcast (0.594 vs 0.714).
+
+Untuk forecast satu bulan ke depan, tambahan fitur harga tidak signifikan baik
+dibanding AR(1) maupun headline. Untuk inflasi umum YoY, tidak ada tambahan sama
+sekali. Sinyal harga pangan bersifat kontemporer, bukan prediktif, dan sebagian
+besar informasinya sudah tercermin di inflasi umum bulanan.
 
 Kontrol negatif: tiga kelompok yang tidak dipengaruhi harga beras/cabai/daging —
 `rokok_mtm`, `minuman_mtm`, `alkohol_mtm` — tidak membaik; selisihnya -0.002,
@@ -196,13 +220,21 @@ sederhana tanpa bobot konsumsi, dan satu kali spesifikasi (tanpa tuning). Fitur
 memakai harga sepanjang bulan, jadi ini nowcast akhir bulan (CPI belum rilis),
 bukan prediksi sebelum bulan berjalan.
 
+Catatan pembanding `headline_mtm`: nilainya dirilis BPS bersamaan dengan target
+`food_mtm` (awal bulan berikutnya), jadi model `AR(1)+headline` **bukan** nowcast
+yang bisa dipakai sebelum rilis. Perannya menguji informasi tambahan: apakah
+PIHPS masih menjelaskan inflasi makanan setelah inflasi umum diketahui. Jawabannya
+belum terbukti. Korelasi `food_mtm` vs `headline_mtm` = 0.580 (81 bulan).
+
 ## Selanjutnya
 
 1. Indeks harga berbobot konsumsi. Terblokir: bobot per komoditas tidak tersedia
    sebagai variabel WebAPI (sudah dicek), jadi perlu Diagram Timbang dari publikasi
    BPS (PDF/Excel) dan pemetaan komoditas PIHPS ke komoditas IHK.
 2. Publikasikan dataset fitur bulanan (Hugging Face Datasets) + datasheet.
-3. Bandingkan dengan fitur inflasi harga pangan resmi BPS sebagai pembanding.
+3. Pembanding resmi BPS: headline sudah selesai dan hasilnya nol (lihat di atas).
+   Langkah berikutnya IHK makanan level (var 2212, 2022=100) — lewat WebAPI hanya
+   tersedia 2024+, jadi riwayat 2020-2023 butuh arsip publikasi BPS.
 
 ## Test
 
