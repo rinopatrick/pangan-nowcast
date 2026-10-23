@@ -120,11 +120,12 @@ def _cmd_dataset(args: argparse.Namespace) -> int:
 
 
 def _cmd_backtest(args: argparse.Namespace) -> int:
-    panel = backtest.load_dataset(args.dataset, target=args.target)
-    rows = backtest.rolling(panel, min_train=args.min_train, target=args.target)
+    panel = backtest.load_dataset(args.dataset, target=args.target, horizon=args.horizon)
+    rows = backtest.rolling(panel, min_train=args.min_train)
     if not rows:
         print("data tidak cukup untuk backtest", file=sys.stderr)
         return 1
+    print(f"target={args.target} horizon={args.horizon} uji={rows[0]['month']}..{rows[-1]['month']}")
     for label, key in [
         ("naive", "pred_base"),
         ("AR(1)", "pred_ar"),
@@ -145,7 +146,7 @@ def _cmd_backtest(args: argparse.Namespace) -> int:
         f"selisih MAE (harga - AR):    {ci_ar['diff']:+.3f}  "
         f"95% CI [{ci_ar['lo']:+.3f}, {ci_ar['hi']:+.3f}]"
     )
-    fields = ["month", "y", "pred_base", "pred_ar", "pred_feat", "n_train"]
+    fields = ["month", "origin", "y", "pred_base", "pred_ar", "pred_feat", "n_train"]
     with open(args.out, "w", newline="", encoding="utf-8") as fh:
         writer = csv.DictWriter(fh, fieldnames=fields, extrasaction="ignore")
         writer.writeheader()
@@ -196,6 +197,7 @@ def main(argv: list[str] | None = None) -> int:
     bt = sub.add_parser("backtest", help="rolling-origin: naive vs AR(1)+fitur harga")
     bt.add_argument("--dataset", default="data/dataset.csv")
     bt.add_argument("--target", default="cpi_yoy", help="nama kolom target di dataset")
+    bt.add_argument("--horizon", type=int, default=0, choices=[0, 1], help="0 = nowcast, 1 = forecast")
     bt.add_argument("--min-train", type=int, default=30)
     bt.add_argument("--out", default="data/backtest.csv")
 

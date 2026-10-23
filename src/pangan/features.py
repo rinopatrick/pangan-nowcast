@@ -7,11 +7,14 @@ import statistics
 MONTH_FIELDS = ["n_obs", "mean", "last", "min", "max", "std", "mom_pct"]
 
 
-def prev_month(month: str) -> str:
+def add_months(month: str, delta: int) -> str:
     year, mon = (int(x) for x in month.split("-"))
-    if mon == 1:
-        return f"{year - 1}-12"
-    return f"{year}-{mon - 1:02d}"
+    total = year * 12 + (mon - 1) + delta
+    return f"{total // 12}-{total % 12 + 1:02d}"
+
+
+def prev_month(month: str) -> str:
+    return add_months(month, -1)
 
 
 def monthly(prices: list[tuple[str, str, float | None]]) -> dict[tuple[str, str], dict]:

@@ -124,26 +124,32 @@ Hormati sumbernya: `--sleep 1` default, jangan jalankan paralel.
 ## Hasil backtest
 
 Rolling-origin, `--min-train 30`, tiap prediksi hanya memakai data sebelum bulan uji.
-Nowcast, bukan ramalan: harga bulan t diketahui pada akhir bulan t, CPI rilis awal t+1.
+`horizon=0` = nowcast: fitur harga bulan t, target bulan t (CPI rilis awal t+1).
+`horizon=1` = forecast: fitur bulan t, target bulan t+1.
 
-| target | model | n | MAE | RMSE |
-|---|---|---|---|---|
-| `cpi_yoy` (inflasi umum YoY) | naive | 31 | 0.361 | 0.465 |
-| `cpi_yoy` | AR(1) | 31 | 0.398 | 0.506 |
-| `cpi_yoy` | AR(1)+harga | 31 | 0.398 | 0.511 |
-| `food_mtm` (makanan m-to-m) | naive | 48 | 0.981 | 1.288 |
-| `food_mtm` | AR(1) | 48 | 0.795 | 0.989 |
-| `food_mtm` | AR(1)+harga | 48 | 0.714 | 0.880 |
+| target | horizon | model | n | MAE | RMSE |
+|---|---|---|---|---|---|
+| `cpi_yoy` (inflasi umum YoY) | 0 | naive | 31 | 0.361 | 0.465 |
+| `cpi_yoy` | 0 | AR(1) | 31 | 0.398 | 0.506 |
+| `cpi_yoy` | 0 | AR(1)+harga | 31 | 0.398 | 0.511 |
+| `food_mtm` (makanan m-to-m) | 0 | naive | 48 | 0.981 | 1.288 |
+| `food_mtm` | 0 | AR(1) | 48 | 0.795 | 0.989 |
+| `food_mtm` | 0 | AR(1)+harga | 48 | **0.714** | **0.880** |
+| `food_mtm` | 1 | naive | 47 | 0.987 | 1.297 |
+| `food_mtm` | 1 | AR(1) | 47 | 0.784 | 0.981 |
+| `food_mtm` | 1 | AR(1)+harga | 47 | 0.771 | 0.938 |
 
 Selisih MAE fitur harga, bootstrap 5.000 resample:
 
-- `food_mtm` vs naive: **-0.268** [-0.436, -0.107]
-- `food_mtm` vs AR(1): **-0.082** [-0.147, -0.017]
-- `cpi_yoy` vs AR(1): -0.001 [-0.019, +0.017]
+- `food_mtm` horizon 0 vs AR(1): **-0.082** [-0.147, -0.017]
+- `food_mtm` horizon 1 vs AR(1): -0.013 [-0.064, +0.038]
+- `food_mtm` horizon 0 vs naive: **-0.268** [-0.436, -0.107]
+- `cpi_yoy` horizon 0 vs AR(1): -0.001 [-0.019, +0.017]
 
-Kesimpulan: harga pangan harian menambah akurasi untuk nowcast **inflasi makanan
-m-to-m**, dan selisihnya tetap signifikan setelah inersia AR(1) dikontrol. Untuk
-inflasi umum YoY, fitur harga tidak menambah apa pun.
+Kesimpulan: harga pangan harian menambah akurasi untuk **nowcast** inflasi makanan
+m-to-m, dan tetap signifikan setelah inersia AR(1) dikontrol. Untuk forecast satu
+bulan ke depan, tambahannya tidak signifikan. Untuk inflasi umum YoY, tidak ada
+tambahan sama sekali. Sinyal harga pangan bersifat kontemporer, bukan prediktif.
 
 Batasan: 48 bulan uji, target disambung antar dua basis IHK, fitur masih rata-rata
 sederhana tanpa bobot konsumsi, dan satu kali spesifikasi (tanpa tuning). Fitur
@@ -152,10 +158,12 @@ bukan prediksi sebelum bulan berjalan.
 
 ## Selanjutnya
 
-1. Fitur indeks harga pangan berbobot konsumsi, bukan rata-rata sederhana.
-2. Uji horizon 1 bulan (forecast, bukan nowcast).
-3. Bandingkan target kelompok lain (minuman, rokok) sebagai kontrol negatif.
-4. Dashboard + laporan.
+1. Kontrol negatif: target kelompok lain (minuman, rokok) yang tidak terkait
+   harga pangan yang kita pantau.
+2. Indeks harga berbobot konsumsi. Terblokir: bobot per komoditas tidak tersedia
+   sebagai variabel WebAPI (sudah dicek), jadi perlu Diagram Timbang dari publikasi
+   BPS (PDF/Excel) dan pemetaan komoditas PIHPS ke komoditas IHK.
+3. Dashboard + laporan.
 
 ## Test
 

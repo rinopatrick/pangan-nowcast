@@ -1,7 +1,8 @@
-"""Backtest rolling-origin: AR(1) vs AR(1) + fitur harga pangan.
+"""Backtest rolling-origin: naive vs AR(1) vs AR(1) + fitur harga pangan.
 
-Target: inflasi umum YoY bulan t. Fitur harga bulan t sudah diketahui pada akhir
-bulan t (CPI baru rilis awal bulan t+1), jadi ini nowcast, bukan ramalan ke depan.
+`horizon=0` adalah nowcast: target bulan t, fitur harga bulan t (diketahui pada
+akhir bulan t; CPI baru rilis awal bulan t+1). `horizon=1` adalah forecast satu
+bulan ke depan: fitur bulan t, target bulan t+1.
 """
 
 from __future__ import annotations
@@ -10,13 +11,13 @@ import csv
 import math
 import statistics
 
-from .features import prev_month
+from .features import add_months
 
 TARGET = "cpi_yoy"
 FEATURES = ["food_mom", "food_mom_3"]
 
 
-def load_dataset(path: str, target: str = TARGET) -> list[dict]:
+def load_dataset(path: str, target: str = TARGET, horizon: int = 0) -> list[dict]:
     with open(path, newline="", encoding="utf-8") as fh:
         rows = list(csv.DictReader(fh))
 
@@ -25,24 +26,31 @@ def load_dataset(path: str, target: str = TARGET) -> list[dict]:
         by_month.setdefault(row["month"], []).append(row)
 
     months = sorted(by_month)
-    cpi = {}
-    mom = {}
+    values: dict[str, float | None] = {}
+    mom: dict[str, float | None] = {}
     for month in months:
         targets = [float(r[target]) for r in by_month[month] if r[target] not in ("", None)]
-        cpi[month] = targets[0] if targets else None
+        values[month] = targets[0] if targets else None
         moms = [float(r["mom_pct"]) for r in by_month[month] if r["mom_pct"] not in ("", None)]
         mom[month] = statistics.fmean(moms) if moms else None
 
     panel = []
-    for i, month in enumerate(months):
-        prev = months[i - 1] if i else None
-        consecutive = prev is not None and prev == prev_month(month)
-        window = [mom.get(prev_month(month)), mom.get(prev_month(prev_month(month))), mom.get(month)]
+    for month in months:
+        target_month = add_months(month, horizon)
+        y = values.get(target_month)
+        if y is None:
+            continue
+        window = [
+            mom.get(add_months(month, -1)),
+            mom.get(add_months(month, -2)),
+            mom.get(month),
+        ]
         panel.append(
             {
                 "month": month,
-                target: cpi[month],
-                "y_lag1": cpi.get(prev) if consecutive else None,
+                "target_month": target_month,
+                "y": y,
+                "y_lag1": values.get(add_months(target_month, -1)),
                 "food_mom": mom[month],
                 "food_mom_3": sum(window) if all(v is not None for v in window) else None,
                 "n_commodities": len(by_month[month]),
@@ -51,38 +59,35 @@ def load_dataset(path: str, target: str = TARGET) -> list[dict]:
     return panel
 
 
-def _fit_predict(train: list[dict], row: dict, cols: list[str], target: str = TARGET) -> float:
+def _fit_predict(train: list[dict], row: dict, cols: list[str]) -> float:
     import numpy as np
 
     keys = ["y_lag1", *cols]
     X = np.array([[1.0, *(r[k] for k in keys)] for r in train])
-    y = np.array([r[target] for r in train])
+    y = np.array([r["y"] for r in train])
     beta, *_ = np.linalg.lstsq(X, y, rcond=None)
     x = np.array([1.0, *(row[k] for k in keys)])
     return float(x @ beta)
 
 
-def rolling(
-    panel: list[dict], cols: list[str] = FEATURES, min_train: int = 30, target: str = TARGET
-) -> list[dict]:
+def rolling(panel: list[dict], cols: list[str] = FEATURES, min_train: int = 30) -> list[dict]:
     """Untuk tiap bulan uji, model hanya melihat data sebelum bulan itu."""
     out = []
     for i, row in enumerate(panel):
         needed = ["y_lag1", *cols]
-        if row[target] is None or any(row[k] is None for k in needed):
+        if any(row[k] is None for k in needed):
             continue
-        train = [
-            r for r in panel[:i] if r[target] is not None and all(r[k] is not None for k in needed)
-        ]
+        train = [r for r in panel[:i] if all(r[k] is not None for k in needed)]
         if len(train) < min_train:
             continue
         out.append(
             {
-                "month": row["month"],
-                "y": row[target],
+                "month": row["target_month"],
+                "origin": row["month"],
+                "y": row["y"],
                 "pred_base": row["y_lag1"],
-                "pred_ar": _fit_predict(train, row, [], target),
-                "pred_feat": _fit_predict(train, row, cols, target),
+                "pred_ar": _fit_predict(train, row, []),
+                "pred_feat": _fit_predict(train, row, cols),
                 "n_train": len(train),
             }
         )
@@ -101,7 +106,11 @@ def metrics(rows: list[dict], key: str) -> dict:
 
 
 def mae_diff_ci(
-    rows: list[dict], base: str = "pred_base", feat: str = "pred_feat", n_boot: int = 5000, seed: int = 0
+    rows: list[dict],
+    base: str = "pred_base",
+    feat: str = "pred_feat",
+    n_boot: int = 5000,
+    seed: int = 0,
 ) -> dict:
     """Selisih MAE(feat) - MAE(base) + CI bootstrap 95%. Positif = fitur lebih buruk."""
     import numpy as np
