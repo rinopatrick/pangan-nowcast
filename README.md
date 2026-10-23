@@ -151,6 +151,20 @@ ringkasan CI. Tanpa JavaScript atau dependensi tambahan.
 
 ![Contoh laporan](docs/report.png)
 
+## Ekspor dataset + datasheet
+
+```bash
+pangan export --dataset data/dataset_food.csv --out data/publish
+```
+
+Menghasilkan dua berkas: `pangan_nowcast_monthly.csv` (1722 baris, 82 bulan,
+21 komoditas) dan `pangan_nowcast_monthly_datasheet.md`. Semua angka di datasheet
+dihitung dari data, termasuk jumlah baris tanpa target/pembanding. `data/` tetap
+gitignored; yang di-commit hanya kode ekspornya.
+
+Publikasi ke Hugging Face Datasets butuh login lebih dulu (`hf auth login`) dan
+nama repo tujuan; belum dijalankan karena belum ada kredensial di mesin ini.
+
 ## Hasil backtest
 
 Rolling-origin, `--min-train 30`, tiap prediksi hanya memakai data sebelum bulan uji.
