@@ -110,8 +110,19 @@ def _cmd_dataset(args: argparse.Namespace) -> int:
     if not target:
         print(f"seri '{args.target_series}' kosong di tabel macro", file=sys.stderr)
         return 1
-    rows = features.build_dataset(prices, target, args.target_name)
-    fields = ["month", "commodity_id", *features.MONTH_FIELDS, args.target_name]
+    extras = {}
+    for spec in args.extra or []:
+        if "=" not in spec:
+            print(f"--extra harus NAME=SERIES, bukan {spec!r}", file=sys.stderr)
+            return 1
+        name, series = spec.split("=", 1)
+        values = macro.load(con, series)
+        if not values:
+            print(f"seri '{series}' kosong di tabel macro", file=sys.stderr)
+            return 1
+        extras[name.strip()] = values
+    rows = features.build_dataset(prices, target, args.target_name, extras=extras)
+    fields = ["month", "commodity_id", *features.MONTH_FIELDS, args.target_name, *extras]
     with open(args.out, "w", newline="", encoding="utf-8") as fh:
         writer = csv.DictWriter(fh, fieldnames=fields)
         writer.writeheader()
@@ -131,10 +142,14 @@ def _cmd_backtest(args: argparse.Namespace) -> int:
         ("naive", "pred_base"),
         ("AR(1)", "pred_ar"),
         ("AR(1)+harga", "pred_feat"),
+        ("AR(1)+headline", "pred_headline"),
     ]:
-        m = backtest.metrics(rows, key)
+        subset = backtest.with_predictions(rows, [key])
+        if not subset:
+            continue
+        m = backtest.metrics(subset, key)
         print(
-            f"{label:12s} n={m['n']:3d}  MAE={m['mae']:.3f}  "
+            f"{label:14s} n={m['n']:3d}  MAE={m['mae']:.3f}  "
             f"RMSE={m['rmse']:.3f}  bias={m['bias']:+.3f}"
         )
     ci = backtest.mae_diff_ci(rows)
@@ -147,7 +162,14 @@ def _cmd_backtest(args: argparse.Namespace) -> int:
         f"selisih MAE (harga - AR):    {ci_ar['diff']:+.3f}  "
         f"95% CI [{ci_ar['lo']:+.3f}, {ci_ar['hi']:+.3f}]"
     )
-    fields = ["month", "origin", "y", "pred_base", "pred_ar", "pred_feat", "n_train"]
+    both = backtest.with_predictions(rows, ["pred_feat", "pred_headline"])
+    if both:
+        ci_hl = backtest.mae_diff_ci(both, base="pred_headline", feat="pred_feat")
+        print(
+            f"selisih MAE (harga - headline, n={len(both)}): {ci_hl['diff']:+.3f}  "
+            f"95% CI [{ci_hl['lo']:+.3f}, {ci_hl['hi']:+.3f}]"
+        )
+    fields = ["month", "origin", "y", "pred_base", "pred_ar", "pred_feat", "pred_headline", "n_train"]
     with open(args.out, "w", newline="", encoding="utf-8") as fh:
         writer = csv.DictWriter(fh, fieldnames=fields, extrasaction="ignore")
         writer.writeheader()
@@ -208,6 +230,12 @@ def main(argv: list[str] | None = None) -> int:
     dataset.add_argument("--out", default="data/dataset.csv")
     dataset.add_argument("--target-series", default=macro.SERIES, help="seri di tabel macro")
     dataset.add_argument("--target-name", default="cpi_yoy", help="nama kolom target di CSV")
+    dataset.add_argument(
+        "--extra",
+        action="append",
+        metavar="NAME=SERIES",
+        help="kolom tambahan dari tabel macro, mis. headline_mtm=bps_headline_mtm",
+    )
 
     bt = sub.add_parser("backtest", help="rolling-origin: naive vs AR(1)+fitur harga")
     bt.add_argument("--dataset", default="data/dataset.csv")

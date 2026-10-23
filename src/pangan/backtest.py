@@ -3,6 +3,10 @@
 `horizon=0` adalah nowcast: target bulan t, fitur harga bulan t (diketahui pada
 akhir bulan t; CPI baru rilis awal bulan t+1). `horizon=1` adalah forecast satu
 bulan ke depan: fitur bulan t, target bulan t+1.
+
+`pred_headline` adalah pembanding: AR(1) + inflasi umum bulanan resmi BPS
+(`headline_mtm`). Kolom itu opsional di dataset; tanpa kolom, `pred_headline`
+bernilai None.
 """
 
 from __future__ import annotations
@@ -15,6 +19,7 @@ from .features import add_months
 
 TARGET = "cpi_yoy"
 FEATURES = ["food_mom", "food_mom_3"]
+COMPARATOR = "headline_mtm"
 
 
 def load_dataset(path: str, target: str = TARGET, horizon: int = 0) -> list[dict]:
@@ -28,11 +33,20 @@ def load_dataset(path: str, target: str = TARGET, horizon: int = 0) -> list[dict
     months = sorted(by_month)
     values: dict[str, float | None] = {}
     mom: dict[str, float | None] = {}
+    comparator: dict[str, float | None] = {}
+    has_comparator = any(COMPARATOR in row for row in rows)
     for month in months:
-        targets = [float(r[target]) for r in by_month[month] if r[target] not in ("", None)]
-        values[month] = targets[0] if targets else None
+        picks = [r[target] for r in by_month[month] if r.get(target) not in ("", None)]
+        values[month] = float(picks[0]) if picks else None
         moms = [float(r["mom_pct"]) for r in by_month[month] if r["mom_pct"] not in ("", None)]
         mom[month] = statistics.fmean(moms) if moms else None
+        if has_comparator:
+            refs = [
+                r[COMPARATOR]
+                for r in by_month[month]
+                if r.get(COMPARATOR) not in ("", None)
+            ]
+            comparator[month] = float(refs[0]) if refs else None
 
     panel = []
     for month in months:
@@ -53,6 +67,7 @@ def load_dataset(path: str, target: str = TARGET, horizon: int = 0) -> list[dict
                 "y_lag1": values.get(add_months(target_month, -1)),
                 "food_mom": mom[month],
                 "food_mom_3": sum(window) if all(v is not None for v in window) else None,
+                "headline_mtm": comparator.get(month),
                 "n_commodities": len(by_month[month]),
             }
         )
@@ -75,11 +90,19 @@ def rolling(panel: list[dict], cols: list[str] = FEATURES, min_train: int = 30) 
     out = []
     for i, row in enumerate(panel):
         needed = ["y_lag1", *cols]
-        if any(row[k] is None for k in needed):
+        if any(row.get(k) is None for k in needed):
             continue
-        train = [r for r in panel[:i] if all(r[k] is not None for k in needed)]
+        train = [r for r in panel[:i] if all(r.get(k) is not None for k in needed)]
         if len(train) < min_train:
             continue
+        pred_headline = None
+        if row.get(COMPARATOR) is not None:
+            cmp_needed = ["y_lag1", COMPARATOR]
+            cmp_train = [
+                r for r in panel[:i] if all(r.get(k) is not None for k in cmp_needed)
+            ]
+            if len(cmp_train) >= min_train:
+                pred_headline = _fit_predict(cmp_train, row, [COMPARATOR])
         out.append(
             {
                 "month": row["target_month"],
@@ -88,10 +111,15 @@ def rolling(panel: list[dict], cols: list[str] = FEATURES, min_train: int = 30) 
                 "pred_base": row["y_lag1"],
                 "pred_ar": _fit_predict(train, row, []),
                 "pred_feat": _fit_predict(train, row, cols),
+                "pred_headline": pred_headline,
                 "n_train": len(train),
             }
         )
     return out
+
+def with_predictions(rows: list[dict], keys: list[str]) -> list[dict]:
+    """Subset baris yang semua prediksinya tersedia (untuk metrik yang setara)."""
+    return [r for r in rows if all(r.get(k) is not None for k in keys)]
 
 
 def metrics(rows: list[dict], key: str) -> dict:

@@ -47,3 +47,13 @@ def test_macro_parse_csv_skips_missing():
 def test_build_dataset_custom_target_name():
     rows = features.build_dataset([("com_1", "2024-01-02", 100.0)], {"2024-01": 1.2}, "food_mtm")
     assert rows[0]["food_mtm"] == 1.2
+
+def test_build_dataset_extra_series():
+    prices = [("com_1", "2024-01-02", 100.0), ("com_1", "2024-02-02", 110.0)]
+    rows = features.build_dataset(
+        prices,
+        {"2024-01": 0.57},
+        extras={"headline_mtm": {"2024-01": 0.35}},
+    )
+    assert rows[0]["headline_mtm"] == 0.35
+    assert rows[1]["headline_mtm"] is None

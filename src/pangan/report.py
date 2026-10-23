@@ -8,7 +8,12 @@ MODELS = [
     ("pred_base", "naive", "#9aa0a6"),
     ("pred_ar", "AR(1)", "#1a73e8"),
     ("pred_feat", "AR(1)+harga", "#d93025"),
+    ("pred_headline", "AR(1)+headline", "#188038"),
 ]
+
+def available_models(rows: list[dict]) -> list[tuple[str, str, str]]:
+    """Model yang punya prediksi untuk semua baris (kolom opsional bisa kosong)."""
+    return [m for m in MODELS if all(r.get(m[0]) is not None for r in rows)]
 
 _STYLE = """
 body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;margin:32px auto;
@@ -28,9 +33,10 @@ def _fmt(value: float) -> str:
 
 
 def svg_chart(rows: list[dict], width: int = 780, height: int = 300) -> str:
+    models = available_models(rows)
     pad_l, pad_r, pad_t, pad_b = 46, 16, 16, 34
     values = [r["y"] for r in rows]
-    for key, _, _ in MODELS:
+    for key, _, _ in models:
         values += [r[key] for r in rows]
     lo, hi = min(values), max(values)
     span = (hi - lo) or 1.0
@@ -64,7 +70,7 @@ def svg_chart(rows: list[dict], width: int = 780, height: int = 300) -> str:
         + " ".join(f"{x(i):.1f},{y(r['y']):.1f}" for i, r in enumerate(rows))
         + '"/>'
     )
-    for key, label, color in MODELS:
+    for key, label, color in models:
         parts.append(
             f'<polyline fill="none" stroke="{color}" stroke-width="1.6" '
             f'stroke-dasharray="{"4 3" if key != "pred_feat" else ""}" points="'
@@ -78,7 +84,7 @@ def svg_chart(rows: list[dict], width: int = 780, height: int = 300) -> str:
             f'font-size="11" fill="#5f6368">{rows[idx]["month"]}</text>'
         )
 
-    legend = [("aktual", "#202124")] + [(label, color) for _, label, color in MODELS]
+    legend = [("aktual", "#202124")] + [(label, color) for _, label, color in models]
     lx = pad_l
     for label, color in legend:
         parts.append(f'<rect x="{lx}" y="4" width="14" height="3" fill="{color}"/>')
@@ -92,11 +98,12 @@ def svg_chart(rows: list[dict], width: int = 780, height: int = 300) -> str:
 
 
 def metrics_table(rows: list[dict]) -> str:
-    scores = {key: backtest.metrics(rows, key) for key, _, _ in MODELS}
+    models = available_models(rows)
+    scores = {key: backtest.metrics(rows, key) for key, _, _ in models}
     best = min(scores, key=lambda k: scores[k]["mae"])
     head = "<tr><th>model</th><th>n</th><th>MAE</th><th>RMSE</th><th>bias</th></tr>"
     body = []
-    for key, label, _ in MODELS:
+    for key, label, _ in models:
         m = scores[key]
         cls = ' class="best"' if key == best else ""
         body.append(
@@ -111,6 +118,14 @@ def build_report(
 ) -> str:
     ci = backtest.mae_diff_ci(rows)
     ci_ar = backtest.mae_diff_ci(rows, base="pred_ar")
+    headline_note = ""
+    both = backtest.with_predictions(rows, ["pred_feat", "pred_headline"])
+    if both:
+        ci_hl = backtest.mae_diff_ci(both, base="pred_headline", feat="pred_feat")
+        headline_note = (
+            f" Vs AR(1)+headline (n={len(both)}): {ci_hl['diff']:+.3f}"
+            f" ({ci_hl['lo']:+.3f} s/d {ci_hl['hi']:+.3f})."
+        )
     period = f"{rows[0]['month']} s/d {rows[-1]['month']}"
     return f"""<!doctype html>
 <html lang="id"><head><meta charset="utf-8">
@@ -123,7 +138,7 @@ minimum {min_train} bulan latih · sumber {dataset}</div>
 {svg_chart(rows)}
 <p class="note">Selisih MAE fitur harga vs naive: {ci['diff']:+.3f}
 (95% CI {ci['lo']:+.3f} s/d {ci['hi']:+.3f}). Vs AR(1): {ci_ar['diff']:+.3f}
-({ci_ar['lo']:+.3f} s/d {ci_ar['hi']:+.3f}). CI bootstrap 5.000 resample.
+({ci_ar['lo']:+.3f} s/d {ci_ar['hi']:+.3f}).{headline_note} CI bootstrap 5.000 resample.
 Horizon 0 = nowcast akhir bulan; harga bulan berjalan sudah diketahui, CPI belum rilis.</p>
 </body></html>
 """
