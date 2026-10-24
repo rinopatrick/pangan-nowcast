@@ -178,6 +178,25 @@ def test_rolling_adds_nested_headline_plus_price():
     assert all(isinstance(r["pred_headline_feat"], float) for r in result)
     assert all(r["pred_headline_feat"] != r["pred_headline"] for r in result)
 
+def _weighted_panel():
+    panel = _headline_panel()
+    for i, row in enumerate(panel):
+        row["mom_weighted"] = 0.3 + i * 0.02
+        row["mom_weighted_3"] = 0.9 + i * 0.06
+    return panel
+
+def test_rolling_adds_weighted_predictions():
+    result = backtest.rolling(_weighted_panel(), min_train=5)
+    assert result
+    assert all(isinstance(r["pred_weighted"], float) for r in result)
+    assert all(isinstance(r["pred_headline_weighted"], float) for r in result)
+    assert all(r["pred_weighted"] != r["pred_feat"] for r in result)
+
+def test_rolling_without_weighted_columns_sets_none():
+    result = backtest.rolling(_headline_panel(), min_train=5)
+    assert all(r["pred_weighted"] is None for r in result)
+    assert all(r["pred_headline_weighted"] is None for r in result)
+
 def test_dm_test_no_difference():
     rows = [{"y": 1.0, "base": 1.0, "feat": 1.0} for _ in range(40)]
     out = backtest.dm_test(rows, base="base", feat="feat")

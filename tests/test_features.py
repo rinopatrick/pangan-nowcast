@@ -57,3 +57,16 @@ def test_build_dataset_extra_series():
     )
     assert rows[0]["headline_mtm"] == 0.35
     assert rows[1]["headline_mtm"] is None
+
+def test_build_dataset_adds_weighted_mom():
+    prices = [
+        ("com_11", "2024-01-02", 100.0),
+        ("com_11", "2024-02-02", 110.0),
+        ("com_12", "2024-02-02", 50.0),
+    ]
+    rows = features.build_dataset(prices, {"2024-02": 0.4})
+    feb = [r for r in rows if r["month"] == "2024-02"]
+    assert feb[0]["mom_weighted"] == feb[1]["mom_weighted"]
+    assert feb[0]["mom_weighted"] is not None
+    assert rows[0]["mom_weighted"] is None
+    assert "mom_weighted_3" in rows[0]

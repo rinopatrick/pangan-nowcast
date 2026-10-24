@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import statistics
 
+from . import weights
+
 MONTH_FIELDS = ["n_obs", "mean", "last", "min", "max", "std", "mom_pct"]
 
 
@@ -51,18 +53,34 @@ def build_dataset(
     target: dict[str, float],
     target_name: str = "cpi_yoy",
     extras: dict[str, dict[str, float]] | None = None,
+    weighted: bool = True,
 ) -> list[dict]:
-    """`extras` = {nama kolom: {month: nilai}}. Nilai hilang menjadi None."""
+    """`extras` = {nama kolom: {month: nilai}}. Nilai hilang menjadi None.
+
+    `weighted=True` menambah `mom_weighted` dan `mom_weighted_3` memakai bobot
+    IHK nasional dari `pangan.weights`.
+    """
     extras = extras or {}
+    monthly_rows = monthly(prices)
+    weighted_mom = weights.weighted_mom(monthly_rows) if weighted else {}
     rows = []
-    for (commodity_id, month), feats in sorted(monthly(prices).items()):
-        rows.append(
-            {
-                "month": month,
-                "commodity_id": commodity_id,
-                **feats,
-                target_name: target.get(month),
-                **{name: values.get(month) for name, values in extras.items()},
-            }
-        )
+    for (commodity_id, month), feats in sorted(monthly_rows.items()):
+        row = {
+            "month": month,
+            "commodity_id": commodity_id,
+            **feats,
+            target_name: target.get(month),
+            **{name: values.get(month) for name, values in extras.items()},
+        }
+        if weighted:
+            window = [
+                weighted_mom.get(add_months(month, -1)),
+                weighted_mom.get(add_months(month, -2)),
+                weighted_mom.get(month),
+            ]
+            row["mom_weighted"] = weighted_mom.get(month)
+            row["mom_weighted_3"] = (
+                sum(window) if all(v is not None for v in window) else None
+            )
+        rows.append(row)
     return rows

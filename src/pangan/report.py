@@ -8,8 +8,10 @@ MODELS = [
     ("pred_base", "naive", "#9aa0a6"),
     ("pred_ar", "AR(1)", "#1a73e8"),
     ("pred_feat", "AR(1)+harga", "#d93025"),
+    ("pred_weighted", "AR(1)+harga berbobot", "#9334e6"),
     ("pred_headline", "AR(1)+headline", "#188038"),
     ("pred_headline_feat", "AR(1)+headline+harga", "#e37400"),
+    ("pred_headline_weighted", "AR(1)+headline+berbobot", "#12b5cb"),
 ]
 
 def available_models(rows: list[dict]) -> list[tuple[str, str, str]]:
@@ -128,15 +130,26 @@ def build_report(
             f" ({ci_hl['lo']:+.3f} s/d {ci_hl['hi']:+.3f})."
         )
     nested_note = ""
+    nested_w = backtest.with_predictions(
+        rows, ["pred_headline", "pred_headline_weighted"]
+    )
     nested = backtest.with_predictions(
         rows, ["pred_headline", "pred_headline_feat"]
     )
+    if nested_w:
+        dm = backtest.dm_test(
+            nested_w, base="pred_headline", feat="pred_headline_weighted"
+        )
+        nested_note += (
+            f" Uji bersarang berbobot (utama), AR(1)+headline+berbobot vs"
+            f" AR(1)+headline: selisih MAE {dm['diff']:+.3f}, Diebold-Mariano"
+            f" {dm['stat']:+.2f} (p={dm['p_value']:.3f}, n={dm['n']}, lag={dm['lag']})."
+        )
     if nested:
         dm = backtest.dm_test(nested, base="pred_headline", feat="pred_headline_feat")
-        nested_note = (
-            f" Uji bersarang (utama), AR(1)+headline+harga vs AR(1)+headline:"
-            f" selisih MAE {dm['diff']:+.3f}, statistik Diebold-Mariano"
-            f" {dm['stat']:+.2f} (p={dm['p_value']:.3f}, n={dm['n']}, lag={dm['lag']})."
+        nested_note += (
+            f" Tanpa bobot: selisih MAE {dm['diff']:+.3f}, DM {dm['stat']:+.2f}"
+            f" (p={dm['p_value']:.3f}, n={dm['n']})."
         )
     period = f"{rows[0]['month']} s/d {rows[-1]['month']}"
     return f"""<!doctype html>

@@ -19,6 +19,7 @@ from .features import add_months
 
 TARGET = "cpi_yoy"
 FEATURES = ["food_mom", "food_mom_3"]
+WEIGHTED_FEATURES = ["mom_weighted", "mom_weighted_3"]
 COMPARATOR = "headline_mtm"
 
 
@@ -34,7 +35,10 @@ def load_dataset(path: str, target: str = TARGET, horizon: int = 0) -> list[dict
     values: dict[str, float | None] = {}
     mom: dict[str, float | None] = {}
     comparator: dict[str, float | None] = {}
+    weighted: dict[str, float | None] = {}
+    weighted_3: dict[str, float | None] = {}
     has_comparator = any(COMPARATOR in row for row in rows)
+    has_weighted = any("mom_weighted" in row for row in rows)
     for month in months:
         picks = [r[target] for r in by_month[month] if r.get(target) not in ("", None)]
         values[month] = float(picks[0]) if picks else None
@@ -47,6 +51,10 @@ def load_dataset(path: str, target: str = TARGET, horizon: int = 0) -> list[dict
                 if r.get(COMPARATOR) not in ("", None)
             ]
             comparator[month] = float(refs[0]) if refs else None
+        if has_weighted:
+            for key, bucket in (("mom_weighted", weighted), ("mom_weighted_3", weighted_3)):
+                refs = [r[key] for r in by_month[month] if r.get(key) not in ("", None)]
+                bucket[month] = float(refs[0]) if refs else None
 
     panel = []
     for month in months:
@@ -68,6 +76,8 @@ def load_dataset(path: str, target: str = TARGET, horizon: int = 0) -> list[dict
                 "food_mom": mom[month],
                 "food_mom_3": sum(window) if all(v is not None for v in window) else None,
                 "headline_mtm": comparator.get(month),
+                "mom_weighted": weighted.get(month),
+                "mom_weighted_3": weighted_3.get(month),
                 "n_commodities": len(by_month[month]),
             }
         )
@@ -102,6 +112,15 @@ def rolling(panel: list[dict], cols: list[str] = FEATURES, min_train: int = 30) 
             continue
         pred_headline = None
         pred_headline_feat = None
+        pred_weighted = None
+        pred_headline_weighted = None
+        if all(row.get(k) is not None for k in WEIGHTED_FEATURES):
+            w_needed = ["y_lag1", *WEIGHTED_FEATURES]
+            w_train = [
+                r for r in panel[:i] if all(r.get(k) is not None for k in w_needed)
+            ]
+            if len(w_train) >= min_train:
+                pred_weighted = _fit_predict(w_train, row, WEIGHTED_FEATURES)
         if row.get(COMPARATOR) is not None:
             cmp_needed = ["y_lag1", COMPARATOR]
             cmp_train = [
@@ -117,6 +136,15 @@ def rolling(panel: list[dict], cols: list[str] = FEATURES, min_train: int = 30) 
                 pred_headline_feat = _fit_predict(
                     nested_train, row, [COMPARATOR, *cols]
                 )
+            if all(row.get(k) is not None for k in WEIGHTED_FEATURES):
+                hw_needed = ["y_lag1", COMPARATOR, *WEIGHTED_FEATURES]
+                hw_train = [
+                    r for r in panel[:i] if all(r.get(k) is not None for k in hw_needed)
+                ]
+                if len(hw_train) >= min_train:
+                    pred_headline_weighted = _fit_predict(
+                        hw_train, row, [COMPARATOR, *WEIGHTED_FEATURES]
+                    )
         out.append(
             {
                 "month": row["target_month"],
@@ -127,6 +155,8 @@ def rolling(panel: list[dict], cols: list[str] = FEATURES, min_train: int = 30) 
                 "pred_feat": _fit_predict(train, row, cols),
                 "pred_headline": pred_headline,
                 "pred_headline_feat": pred_headline_feat,
+                "pred_weighted": pred_weighted,
+                "pred_headline_weighted": pred_headline_weighted,
                 "n_train": len(train),
             }
         )
