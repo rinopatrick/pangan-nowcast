@@ -122,7 +122,15 @@ def _cmd_dataset(args: argparse.Namespace) -> int:
             return 1
         extras[name.strip()] = values
     rows = features.build_dataset(prices, target, args.target_name, extras=extras)
-    fields = ["month", "commodity_id", *features.MONTH_FIELDS, args.target_name, *extras]
+    fields = [
+        "month",
+        "commodity_id",
+        *features.MONTH_FIELDS,
+        "mom_weighted",
+        "mom_weighted_3",
+        args.target_name,
+        *extras,
+    ]
     with open(args.out, "w", newline="", encoding="utf-8") as fh:
         writer = csv.DictWriter(fh, fieldnames=fields)
         writer.writeheader()
@@ -142,8 +150,10 @@ def _cmd_backtest(args: argparse.Namespace) -> int:
         ("naive", "pred_base"),
         ("AR(1)", "pred_ar"),
         ("AR(1)+harga", "pred_feat"),
+        ("AR(1)+harga berbobot", "pred_weighted"),
         ("AR(1)+headline", "pred_headline"),
         ("AR(1)+headline+harga", "pred_headline_feat"),
+        ("AR(1)+headline+berbobot", "pred_headline_weighted"),
     ]:
         subset = backtest.with_predictions(rows, [key])
         if not subset:
@@ -168,6 +178,18 @@ def _cmd_backtest(args: argparse.Namespace) -> int:
         f"DM (harga - AR): {dm_ar['stat']:+.2f}  p={dm_ar['p_value']:.3f}  "
         f"n={dm_ar['n']}  lag={dm_ar['lag']}"
     )
+    if backtest.with_predictions(rows, ["pred_weighted"]):
+        dm_w = backtest.dm_test(rows, base="pred_ar", feat="pred_weighted")
+        print(
+            f"DM (berbobot - AR): {dm_w['stat']:+.2f}  p={dm_w['p_value']:.3f}  "
+            f"n={dm_w['n']}  lag={dm_w['lag']}"
+        )
+        both_w = backtest.with_predictions(rows, ["pred_feat", "pred_weighted"])
+        dm_uw = backtest.dm_test(both_w, base="pred_feat", feat="pred_weighted")
+        print(
+            f"DM (berbobot - harga): {dm_uw['stat']:+.2f}  p={dm_uw['p_value']:.3f}  "
+            f"n={dm_uw['n']}  lag={dm_uw['lag']}"
+        )
     both = backtest.with_predictions(rows, ["pred_feat", "pred_headline"])
     if both:
         ci_hl = backtest.mae_diff_ci(both, base="pred_headline", feat="pred_feat")
@@ -189,6 +211,17 @@ def _cmd_backtest(args: argparse.Namespace) -> int:
             f"uji bersarang (utama): headline+harga - headline = {dm['diff']:+.3f}  "
             f"DM={dm['stat']:+.2f}  p={dm['p_value']:.3f}  n={dm['n']}  lag={dm['lag']}"
         )
+    nested_w = backtest.with_predictions(
+        rows, ["pred_headline", "pred_headline_weighted"]
+    )
+    if nested_w:
+        dm = backtest.dm_test(
+            nested_w, base="pred_headline", feat="pred_headline_weighted"
+        )
+        print(
+            f"uji bersarang berbobot: headline+berbobot - headline = {dm['diff']:+.3f}  "
+            f"DM={dm['stat']:+.2f}  p={dm['p_value']:.3f}  n={dm['n']}  lag={dm['lag']}"
+        )
     fields = [
         "month",
         "origin",
@@ -196,8 +229,10 @@ def _cmd_backtest(args: argparse.Namespace) -> int:
         "pred_base",
         "pred_ar",
         "pred_feat",
+        "pred_weighted",
         "pred_headline",
         "pred_headline_feat",
+        "pred_headline_weighted",
         "n_train",
     ]
     with open(args.out, "w", newline="", encoding="utf-8") as fh:

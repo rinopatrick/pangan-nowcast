@@ -23,6 +23,8 @@ FIELDS = [
     "max",
     "std",
     "mom_pct",
+    "mom_weighted",
+    "mom_weighted_3",
     TARGET,
     COMPARATOR,
 ]
@@ -72,6 +74,9 @@ Satu baris = satu komoditas per bulan.
   **tidak resmi** dan tidak didokumentasikan, sehingga bisa berubah sewaktu-waktu.
 - Target dan pembanding: BPS WebAPI (`var` 1890/2223 untuk makanan, `var` 1 untuk
   inflasi umum). Butuh API key gratis dari https://webapi.bps.go.id/developer/.
+- Bobot `mom_weighted`: BPS, *Diagram Timbang Indeks Harga Konsumen Hasil Survei
+  Biaya Hidup 2022*, Katalog 7102024, Tabel 1.1 (nasional). Sepuluh kategori yang
+  bisa dipetakan mencakup 9,6964% keranjang IHK atau 34,63% kelompok makanan.
 
 ## Kolom
 
@@ -82,6 +87,8 @@ Satu baris = satu komoditas per bulan.
 | `n_obs` | jumlah hari tercatat dalam bulan itu |
 | `mean`, `last`, `min`, `max`, `std` | statistik harga harian bulan itu |
 | `mom_pct` | perubahan `last` vs bulan sebelumnya, persen |
+| `mom_weighted` | m-to-m berbobot IHK untuk 10 kategori yang bisa dipetakan |
+| `mom_weighted_3` | jumlah `mom_weighted` tiga bulan terakhir |
 | `{target}` | inflasi m-to-m kelompok makanan, persen |
 | `{info['comparator']}` | inflasi umum m-to-m, persen |
 
@@ -104,7 +111,9 @@ Satu baris = satu komoditas per bulan.
 
 - Target disambung dari dua basis IHK (2018=100 dan 2022=100); m-to-m tetap
   sebanding antar basis, tapi level tidak boleh dibandingkan lintas basis.
-- Fitur harga masih rata-rata sederhana, belum berbobot konsumsi.
+- Fitur harga memakai bobot IHK 2022 yang baru diterbitkan Februari 2024, jadi
+  untuk bulan sebelum itu bobot bersifat ex-post. Uji ulang pada origin >= 2024-02
+  tetap signifikan (lihat bawah).
 - `{info['comparator']}` dirilis bersamaan dengan target, jadi model yang
   memakainya bukan nowcast yang bisa berjalan sebelum rilis resmi.
 - Data komoditas mengikuti cakupan PIHPS, bukan cakupan keranjang IHK BPS.

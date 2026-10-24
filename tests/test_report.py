@@ -1,6 +1,6 @@
 from pangan import backtest, report
 
-def _rows(headline=False):
+def _rows(headline=False, weighted=False):
     panel = [
         {
             "month": f"2024-{i + 1:02d}",
@@ -15,6 +15,10 @@ def _rows(headline=False):
     if headline:
         for i, row in enumerate(panel):
             row["headline_mtm"] = 0.2 + i * 0.05
+    if weighted:
+        for i, row in enumerate(panel):
+            row["mom_weighted"] = 0.15 + i * 0.01
+            row["mom_weighted_3"] = 0.45 + i * 0.03
     return backtest.rolling(panel, min_train=2)
 
 def test_metrics_table_marks_best_model():
@@ -36,9 +40,17 @@ def test_svg_chart_adds_headline_line_when_available():
     assert "AR(1)+headline+harga" in svg
 
 def test_build_report_primary_test_is_nested():
-    html = report.build_report(_rows(headline=True), "food_mtm", 0, "data/x.csv", 2)
+    html = report.build_report(
+        _rows(headline=True, weighted=True), "food_mtm", 0, "data/x.csv", 2
+    )
     assert "bersarang" in html
     assert "Diebold" in html
+
+def test_svg_chart_adds_weighted_lines():
+    svg = report.svg_chart(_rows(headline=True, weighted=True))
+    assert svg.count("<polyline") == 8
+    assert "AR(1)+harga berbobot" in svg
+    assert "AR(1)+headline+berbobot" in svg
 
 def test_build_report_contains_ci_and_period():
     html = report.build_report(_rows(), "food_mtm", 0, "data/x.csv", 2)
