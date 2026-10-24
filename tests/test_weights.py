@@ -37,3 +37,14 @@ def test_weighted_mom_averages_grades_within_category():
 
 def test_weighted_mom_empty_month_is_none():
     assert weights.weighted_mom({}) == {}
+
+def test_weighted_mom_reads_requested_field():
+    monthly = {
+        ("com_11", "2024-01"): {"mom_pct": 10.0, "mom_mean": 4.0},
+        ("com_12", "2024-01"): {"mom_pct": 0.0, "mom_mean": 2.0},
+    }
+    expected = (4.0 * 0.5098 + 2.0 * 0.3173) / (0.5098 + 0.3173)
+    assert round(weights.weighted_mom(monthly, field="mom_mean")["2024-01"], 9) == round(
+        expected, 9
+    )
+    assert weights.weighted_mom(monthly)["2024-01"] != expected

@@ -88,6 +88,8 @@ def test_rolling_uses_only_past_data():
             "y_lag1": None if i == 0 else 2.0 + (i - 1) * 0.1,
             "food_mom": 0.2,
             "food_mom_3": 0.6,
+            "food_mom_mean": 0.2,
+            "food_mom_mean_3": 0.6,
         }
         for i in range(12)
     ]
@@ -127,6 +129,21 @@ def test_load_dataset_reads_headline_column(tmp_path):
     assert panel[0]["headline_mtm"] == 0.3
     assert panel[1]["headline_mtm"] is None
 
+def test_load_dataset_reads_mean_mom(tmp_path):
+    path = tmp_path / "d.csv"
+    rows = _monthly_rows(["2024-01", "2024-02", "2024-03"], ["2.5", "2.6", "2.7"])
+    for row in rows:
+        row["mom_mean"] = {"2024-01": "1.0", "2024-02": "2.0", "2024-03": "3.0"}[
+            row["month"]
+        ]
+    _write_dataset(path, rows, extra_fields=("mom_mean",))
+
+    panel = backtest.load_dataset(str(path))
+    assert panel[0]["food_mom_mean"] == 1.0
+    assert panel[0]["food_mom_mean_3"] is None
+    assert panel[1]["food_mom_mean_3"] is None
+    assert panel[2]["food_mom_mean_3"] == 6.0
+
 def _headline_panel(last_y=3.0, last_headline=0.9):
     panel = []
     for i in range(12):
@@ -134,10 +151,12 @@ def _headline_panel(last_y=3.0, last_headline=0.9):
             {
                 "month": f"2020-{i + 1:02d}",
                 "target_month": f"2020-{i + 1:02d}",
-                "y": 2.0 + i * 0.1 if i < 11 else last_y,
+                "y": 2.0 + i * 0.1 + (i % 3) * 0.015 if i < 11 else last_y,
                 "y_lag1": None if i == 0 else 2.0 + (i - 1) * 0.1,
                 "food_mom": 0.2,
                 "food_mom_3": 0.6,
+                "food_mom_mean": 0.25 + ((i * 5) % 3) * 0.02,
+                "food_mom_mean_3": 0.75 + ((i * 7) % 4) * 0.03,
                 "headline_mtm": 0.5 + i * 0.01 if i < 11 else last_headline,
             }
         )
@@ -165,12 +184,36 @@ def test_rolling_without_headline_sets_none():
             "y_lag1": None if i == 0 else 2.0 + (i - 1) * 0.1,
             "food_mom": 0.2,
             "food_mom_3": 0.6,
+            "food_mom_mean": 0.25,
+            "food_mom_mean_3": 0.75,
         }
         for i in range(12)
     ]
     result = backtest.rolling(panel, min_train=5)
     assert all(r["pred_headline"] is None for r in result)
     assert all(r["pred_headline_feat"] is None for r in result)
+    assert all(r["pred_headline_feat_last"] is None for r in result)
+
+def test_rolling_default_feature_is_mean_based():
+    result = backtest.rolling(_headline_panel(), min_train=5)
+    assert result
+    assert all(isinstance(r["pred_feat"], float) for r in result)
+    assert all(isinstance(r["pred_feat_last"], float) for r in result)
+    assert all(r["pred_feat"] != r["pred_feat_last"] for r in result)
+
+def test_rolling_skips_when_mean_features_missing():
+    panel = [
+        {
+            "month": f"2020-{i + 1:02d}",
+            "target_month": f"2020-{i + 1:02d}",
+            "y": 2.0 + i * 0.1,
+            "y_lag1": None if i == 0 else 2.0 + (i - 1) * 0.1,
+            "food_mom": 0.2,
+            "food_mom_3": 0.6,
+        }
+        for i in range(12)
+    ]
+    assert backtest.rolling(panel, min_train=5) == []
 
 def test_rolling_adds_nested_headline_plus_price():
     result = backtest.rolling(_headline_panel(), min_train=5)
@@ -181,8 +224,8 @@ def test_rolling_adds_nested_headline_plus_price():
 def _weighted_panel():
     panel = _headline_panel()
     for i, row in enumerate(panel):
-        row["mom_weighted"] = 0.3 + i * 0.02
-        row["mom_weighted_3"] = 0.9 + i * 0.06
+        row["mom_weighted"] = 0.3 + ((i * 3) % 5) * 0.025
+        row["mom_weighted_3"] = 0.9 + ((i * 11) % 3) * 0.05
     return panel
 
 def test_rolling_adds_weighted_predictions():

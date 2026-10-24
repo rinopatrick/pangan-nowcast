@@ -23,6 +23,8 @@ FIELDS = [
     "max",
     "std",
     "mom_pct",
+    "mom_mean",
+    "mom_mean_3",
     "mom_weighted",
     "mom_weighted_3",
     TARGET,
@@ -87,6 +89,8 @@ Satu baris = satu komoditas per bulan.
 | `n_obs` | jumlah hari tercatat dalam bulan itu |
 | `mean`, `last`, `min`, `max`, `std` | statistik harga harian bulan itu |
 | `mom_pct` | perubahan `last` vs bulan sebelumnya, persen |
+| `mom_mean` | perubahan rata-rata bulanan vs bulan sebelumnya, persen |
+| `mom_mean_3` | jumlah `mom_mean` tiga bulan terakhir |
 | `mom_weighted` | m-to-m berbobot IHK untuk 10 kategori yang bisa dipetakan |
 | `mom_weighted_3` | jumlah `mom_weighted` tiga bulan terakhir |
 | `{target}` | inflasi m-to-m kelompok makanan, persen |
@@ -111,6 +115,11 @@ Satu baris = satu komoditas per bulan.
 
 - Target disambung dari dua basis IHK (2018=100 dan 2022=100); m-to-m tetap
   sebanding antar basis, tapi level tidak boleh dibandingkan lintas basis.
+- 34,3% nilai `last` bulanan identik ≥5 hari (run terpanjang 50 hari), jadi
+  `mom_pct` (berbasis `last`) lebih berisik. `mom_mean` memakai rata-rata
+  bulanan dan jadi fitur default di backtest.
+- Ada anomali sumber 2020-07-31: 11 komoditas melonjak >10% dalam sehari lalu
+  kembali. Bulan itu dan 2020-08 hanya masuk data latih.
 - Fitur harga memakai bobot IHK 2022 yang baru diterbitkan Februari 2024, jadi
   untuk bulan sebelum itu bobot bersifat ex-post. Uji ulang pada origin >= 2024-02
   tetap signifikan (lihat bawah).

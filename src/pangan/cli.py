@@ -126,8 +126,7 @@ def _cmd_dataset(args: argparse.Namespace) -> int:
         "month",
         "commodity_id",
         *features.MONTH_FIELDS,
-        "mom_weighted",
-        "mom_weighted_3",
+        *features.DERIVED_FIELDS,
         args.target_name,
         *extras,
     ]
@@ -149,10 +148,12 @@ def _cmd_backtest(args: argparse.Namespace) -> int:
     for label, key in [
         ("naive", "pred_base"),
         ("AR(1)", "pred_ar"),
-        ("AR(1)+harga", "pred_feat"),
+        ("AR(1)+harga (mean)", "pred_feat"),
+        ("AR(1)+harga (last)", "pred_feat_last"),
         ("AR(1)+harga berbobot", "pred_weighted"),
         ("AR(1)+headline", "pred_headline"),
         ("AR(1)+headline+harga", "pred_headline_feat"),
+        ("AR(1)+headline+harga(last)", "pred_headline_feat_last"),
         ("AR(1)+headline+berbobot", "pred_headline_weighted"),
     ]:
         subset = backtest.with_predictions(rows, [key])
@@ -178,7 +179,24 @@ def _cmd_backtest(args: argparse.Namespace) -> int:
         f"DM (harga - AR): {dm_ar['stat']:+.2f}  p={dm_ar['p_value']:.3f}  "
         f"n={dm_ar['n']}  lag={dm_ar['lag']}"
     )
+    if backtest.with_predictions(rows, ["pred_feat_last"]):
+        dm_last = backtest.dm_test(rows, base="pred_ar", feat="pred_feat_last")
+        print(
+            f"DM (harga last - AR): {dm_last['stat']:+.2f}  p={dm_last['p_value']:.3f}  "
+            f"n={dm_last['n']}  lag={dm_last['lag']}"
+        )
+        both_mean = backtest.with_predictions(rows, ["pred_feat_last", "pred_feat"])
+        dm_mean = backtest.dm_test(both_mean, base="pred_feat_last", feat="pred_feat")
+        print(
+            f"DM (harga mean - last): {dm_mean['stat']:+.2f}  p={dm_mean['p_value']:.3f}  "
+            f"n={dm_mean['n']}  lag={dm_mean['lag']}"
+        )
     if backtest.with_predictions(rows, ["pred_weighted"]):
+        ci_w = backtest.mae_diff_ci(rows, base="pred_ar", feat="pred_weighted")
+        print(
+            f"selisih MAE (berbobot - AR): {ci_w['diff']:+.3f}  "
+            f"95% CI [{ci_w['lo']:+.3f}, {ci_w['hi']:+.3f}]"
+        )
         dm_w = backtest.dm_test(rows, base="pred_ar", feat="pred_weighted")
         print(
             f"DM (berbobot - AR): {dm_w['stat']:+.2f}  p={dm_w['p_value']:.3f}  "
@@ -229,9 +247,11 @@ def _cmd_backtest(args: argparse.Namespace) -> int:
         "pred_base",
         "pred_ar",
         "pred_feat",
+        "pred_feat_last",
         "pred_weighted",
         "pred_headline",
         "pred_headline_feat",
+        "pred_headline_feat_last",
         "pred_headline_weighted",
         "n_train",
     ]

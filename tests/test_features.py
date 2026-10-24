@@ -22,9 +22,11 @@ def test_monthly_aggregates_and_mom():
     assert jan["min"] == 100.0
     assert jan["max"] == 110.0
     assert jan["mom_pct"] is None
+    assert jan["mom_mean"] is None
 
     feb = out[("com_1", "2024-02")]
     assert round(feb["mom_pct"], 6) == 10.0
+    assert round(feb["mom_mean"], 6) == round((121.0 / 105.0 - 1) * 100, 6)
 
 
 def test_build_dataset_joins_cpi_and_keeps_missing():
@@ -70,3 +72,17 @@ def test_build_dataset_adds_weighted_mom():
     assert feb[0]["mom_weighted"] is not None
     assert rows[0]["mom_weighted"] is None
     assert "mom_weighted_3" in rows[0]
+
+def test_build_dataset_adds_mean_features():
+    prices = [
+        ("com_1", "2024-01-02", 100.0),
+        ("com_1", "2024-02-02", 110.0),
+        ("com_1", "2024-03-02", 121.0),
+        ("com_1", "2024-04-02", 133.1),
+    ]
+    rows = features.build_dataset(prices, {"2024-04": 0.2})
+    assert rows[0]["mom_mean"] is None
+    assert round(rows[1]["mom_mean"], 6) == 10.0
+    assert rows[2]["mom_mean_3"] is None
+    assert round(rows[3]["mom_mean_3"], 6) == 30.0
+    assert rows[3]["mom_pct"] is not None

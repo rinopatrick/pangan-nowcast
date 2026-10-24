@@ -29,10 +29,14 @@ CATEGORIES: list[tuple[str, float, list[str]]] = [
 COVERAGE = sum(weight for _, weight, _ in CATEGORIES)
 FOOD_GROUP = 27.9999
 
-def weighted_mom(monthly: dict[tuple[str, str], dict]) -> dict[str, float]:
+def weighted_mom(
+    monthly: dict[tuple[str, str], dict], field: str = "mom_pct"
+) -> dict[str, float]:
     """Rata-rata m-to-m per bulan, dibobot IHK.
 
-    `monthly` berbentuk {(commodity_id, "YYYY-MM"): {"mom_pct": ...}}.
+    `monthly` berbentuk {(commodity_id, "YYYY-MM"): {field: ...}}.
+    `field` default `mom_pct` (berbasis `last`); pakai `mom_mean` untuk
+    statistik bulanan yang lebih stabil.
     Beberapa komoditas PIHPS dalam satu kategori dirata-ratakan lebih dulu,
     lalu kategori dibobot. Bobot dinormalisasi ulang hanya atas kategori yang
     punya data bulan itu, supaya bulan dengan data tidak lengkap tidak bias ke nol.
@@ -44,7 +48,7 @@ def weighted_mom(monthly: dict[tuple[str, str], dict]) -> dict[str, float]:
         entry = members.get(commodity_id)
         if entry is None:
             continue
-        value = feats.get("mom_pct")
+        value = feats.get(field)
         if value is None:
             continue
         name, _ = entry

@@ -6,7 +6,8 @@ import statistics
 
 from . import weights
 
-MONTH_FIELDS = ["n_obs", "mean", "last", "min", "max", "std", "mom_pct"]
+MONTH_FIELDS = ["n_obs", "mean", "last", "min", "max", "std", "mom_pct", "mom_mean"]
+DERIVED_FIELDS = ["mom_mean_3", "mom_weighted", "mom_weighted_3"]
 
 
 def add_months(month: str, delta: int) -> str:
@@ -45,6 +46,9 @@ def monthly(prices: list[tuple[str, str, float | None]]) -> dict[tuple[str, str]
         row["mom_pct"] = (
             (row["last"] / prev["last"] - 1.0) * 100.0 if prev and prev["last"] else None
         )
+        row["mom_mean"] = (
+            (row["mean"] / prev["mean"] - 1.0) * 100.0 if prev and prev["mean"] else None
+        )
     return out
 
 
@@ -62,7 +66,7 @@ def build_dataset(
     """
     extras = extras or {}
     monthly_rows = monthly(prices)
-    weighted_mom = weights.weighted_mom(monthly_rows) if weighted else {}
+    weighted_mom = weights.weighted_mom(monthly_rows, field="mom_mean") if weighted else {}
     rows = []
     for (commodity_id, month), feats in sorted(monthly_rows.items()):
         row = {
@@ -82,5 +86,13 @@ def build_dataset(
             row["mom_weighted_3"] = (
                 sum(window) if all(v is not None for v in window) else None
             )
+        mean_window = [
+            monthly_rows.get((commodity_id, add_months(month, -1)), {}).get("mom_mean"),
+            monthly_rows.get((commodity_id, add_months(month, -2)), {}).get("mom_mean"),
+            feats["mom_mean"],
+        ]
+        row["mom_mean_3"] = (
+            sum(mean_window) if all(v is not None for v in mean_window) else None
+        )
         rows.append(row)
     return rows

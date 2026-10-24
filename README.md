@@ -52,6 +52,9 @@ pangan dataset --out data/dataset.csv
 | `n_obs` | jumlah hari tercatat di bulan itu |
 | `mean`, `last`, `min`, `max`, `std` | statistik harga harian bulan itu |
 | `mom_pct` | perubahan `last` vs bulan sebelumnya, persen |
+| `mom_mean` | perubahan `mean` vs bulan sebelumnya, persen (fitur default) |
+| `mom_mean_3` | jumlah `mom_mean` tiga bulan terakhir |
+| `mom_weighted`, `mom_weighted_3` | versi berbobot IHK dari `mom_mean` |
 | `cpi_yoy` | inflasi umum nasional year-on-year (persen) |
 
 Kolom tambahan lewat `--extra NAME=SERIES`, misalnya pembanding inflasi umum
@@ -193,7 +196,9 @@ dibobot. Kolomnya `mom_weighted` dan `mom_weighted_3`.
 
 Rolling-origin, `--min-train 30`, tiap prediksi hanya memakai data sebelum bulan uji.
 `horizon=0` = nowcast: fitur harga bulan t, target bulan t (CPI rilis awal t+1).
-`horizon=1` = forecast: fitur bulan t, target bulan t+1.
+`horizon=1` = forecast: fitur bulan t, target bulan t+1. Fitur default memakai
+`mom_mean` (rata-rata bulanan), bukan `mom_pct` (`last`): 34,3% nilai `last`
+bulanan berasal dari harga yang identik >=5 hari, sehingga lebih berisik.
 
 | target | horizon | model | n | MAE | RMSE |
 |---|---|---|---|---|---|
@@ -202,18 +207,20 @@ Rolling-origin, `--min-train 30`, tiap prediksi hanya memakai data sebelum bulan
 | `cpi_yoy` | 0 | AR(1)+harga | 31 | 0.398 | 0.511 |
 | `food_mtm` (makanan m-to-m) | 0 | naive | 48 | 0.981 | 1.288 |
 | `food_mtm` | 0 | AR(1) | 48 | 0.795 | 0.989 |
-| `food_mtm` | 0 | AR(1)+harga | 48 | 0.714 | 0.880 |
-| `food_mtm` | 0 | AR(1)+harga berbobot | 48 | 0.703 | 0.884 |
+| `food_mtm` | 0 | AR(1)+harga (`last`) | 48 | 0.714 | 0.880 |
+| `food_mtm` | 0 | AR(1)+harga (`mean`) | 48 | 0.474 | 0.583 |
+| `food_mtm` | 0 | AR(1)+harga berbobot | 48 | 0.381 | **0.476** |
 | `food_mtm` | 0 | AR(1)+headline | 48 | 0.594 | 0.910 |
-| `food_mtm` | 0 | AR(1)+headline+harga | 48 | 0.560 | 0.836 |
-| `food_mtm` | 0 | AR(1)+headline+berbobot | 48 | **0.545** | 0.844 |
+| `food_mtm` | 0 | AR(1)+headline+harga (`last`) | 48 | 0.560 | 0.836 |
+| `food_mtm` | 0 | AR(1)+headline+harga (`mean`) | 48 | 0.402 | 0.570 |
+| `food_mtm` | 0 | AR(1)+headline+berbobot | 48 | **0.350** | 0.496 |
 | `food_mtm` | 1 | naive | 47 | 0.987 | 1.297 |
 | `food_mtm` | 1 | AR(1) | 47 | 0.784 | 0.981 |
-| `food_mtm` | 1 | AR(1)+harga | 47 | 0.771 | 0.938 |
-| `food_mtm` | 1 | AR(1)+harga berbobot | 47 | 0.770 | 0.957 |
+| `food_mtm` | 1 | AR(1)+harga (`mean`) | 47 | 0.850 | 1.064 |
+| `food_mtm` | 1 | AR(1)+harga berbobot | 47 | 0.825 | 1.021 |
 | `food_mtm` | 1 | AR(1)+headline | 47 | 0.800 | 1.046 |
-| `food_mtm` | 1 | AR(1)+headline+harga | 47 | 0.783 | 0.997 |
-| `food_mtm` | 1 | AR(1)+headline+berbobot | 47 | 0.787 | 1.011 |
+| `food_mtm` | 1 | AR(1)+headline+harga (`mean`) | 47 | 0.859 | 1.119 |
+| `food_mtm` | 1 | AR(1)+headline+berbobot | 47 | 0.836 | 1.074 |
 | `rokok_mtm` (kontrol negatif) | 0 | naive | 48 | 0.189 | 0.284 |
 | `rokok_mtm` | 0 | AR(1) | 48 | 0.185 | 0.278 |
 | `rokok_mtm` | 0 | AR(1)+harga | 48 | 0.183 | 0.279 |
@@ -226,11 +233,11 @@ Rolling-origin, `--min-train 30`, tiap prediksi hanya memakai data sebelum bulan
 
 Selisih MAE fitur harga, bootstrap 5.000 resample:
 
-- `food_mtm` horizon 0 vs AR(1): **-0.082** [-0.147, -0.017]
-- `food_mtm` horizon 1 vs AR(1): -0.013 [-0.064, +0.038]
-- `food_mtm` horizon 0 vs naive: **-0.268** [-0.436, -0.107]
-- `food_mtm` horizon 0 vs AR(1)+headline: +0.119 [-0.074, +0.292]
-- `food_mtm` horizon 1 vs AR(1)+headline: -0.029 [-0.135, +0.053]
+- harga(`mean`) vs AR(1): h0 **-0.321** [-0.472, -0.174]; h1 +0.066 [+0.005, +0.129]
+- harga(`mean`) vs naive: h0 **-0.507** [-0.709, -0.311]; h1 -0.136 [-0.297, +0.021]
+- berbobot vs AR(1): h0 **-0.414** [-0.563, -0.272]; h1 +0.041 [-0.024, +0.110]
+- harga(`mean`) vs harga(`last`): h0 -0.240 (DM -3.39, p=0.001)
+- berbobot vs harga(`mean`): h0 -0.093 (DM -3.74, p<0.001)
 
 Uji utama memakai model bersarang (bukan dua model terpisah):
 `AR(1)+headline+harga` vs `AR(1)+headline`, dengan Diebold-Mariano
@@ -238,42 +245,43 @@ Uji utama memakai model bersarang (bukan dua model terpisah):
 
 | horizon | varian | selisih MAE | DM | p | n |
 |---|---|---|---|---|---|
-| 0 | tanpa bobot | -0.035 | -1.77 | 0.077 | 48 |
-| 0 | berbobot IHK | **-0.049** | **-3.20** | **0.001** | 48 |
-| 1 | tanpa bobot | -0.018 | -0.70 | 0.486 | 47 |
-| 1 | berbobot IHK | -0.013 | -0.65 | 0.514 | 47 |
+| 0 | tanpa bobot (mean) | -0.193 | -2.60 | 0.009 | 48 |
+| 0 | berbobot IHK | **-0.244** | **-2.90** | **0.004** | 48 |
+| 1 | tanpa bobot (mean) | +0.059 | +1.93 | 0.054 | 47 |
+| 1 | berbobot IHK | +0.036 | +1.04 | 0.298 | 47 |
 
-Uji ketahanan berbobot (origin >= 2024-02, saat bobot 2022 sudah terbit):
-n=32, selisih -0.067, DM -3.52, p<0.001. Origin >= 2025-01: n=21,
-selisih -0.090, DM -4.24, p<0.001.
+Uji ketahanan berbobot (origin >= 2024-02, saat bobot 2022 sudah terbit,
+n=32): tanpa bobot -0.283 (DM -3.06, p=0.002), berbobot -0.355
+(DM -3.42, p=0.0006). Origin >= 2025-01 (n=21): tanpa bobot -0.425
+(DM -4.19), berbobot -0.495 (DM -3.85).
 
-Sebagai pembanding, DM `AR(1)+harga` vs `AR(1)`: horizon 0 = -2.90 (p=0.004),
-horizon 1 = -0.47 (p=0.639). `AR(1)+harga berbobot` vs `AR(1)`: -5.14 (p<0.001).
-Berbobot vs tanpa bobot: -0.68 (p=0.494), jadi keduanya tidak terbedakan
-langsung; yang berubah adalah hasil uji bersarang.
-- `cpi_yoy` horizon 0 vs AR(1): -0.001 [-0.019, +0.017]
-- `rokok_mtm` kontrol vs AR(1): -0.002 [-0.009, +0.005]
-- `minuman_mtm` kontrol vs AR(1): +0.002 [+0.000, +0.004]
-- `alkohol_mtm` kontrol vs AR(1): +0.001 [-0.010, +0.011]
+Sebagai pembanding, DM `AR(1)+harga (mean)` vs `AR(1)`: horizon 0 = -3.59
+(p<0.001), horizon 1 = +2.79 (p=0.005, jadi lebih buruk). `berbobot` vs `AR(1)`:
+-4.29 (p<0.001). Berbobot vs tanpa bobot: -3.74 (p<0.001).
+- `cpi_yoy` horizon 0 vs AR(1): -0.003 [-0.045, +0.036]
+- `rokok_mtm` kontrol vs AR(1): -0.008 [-0.025, +0.011]
+- `minuman_mtm` kontrol vs AR(1): -0.003 [-0.009, +0.004]
+- `alkohol_mtm` kontrol vs AR(1): +0.015 [-0.004, +0.036]
 
-Kesimpulan: dengan bobot konsumsi IHK, fitur harga PIHPS menambah akurasi
-**secara signifikan** di atas inflasi umum resmi untuk nowcast: selisih MAE
--0.049, DM -3.20, p=0.001. Tanpa bobot hasilnya hanya -0.035 (p=0.077).
-Efek ini bertahan saat bobot benar-benar sudah terbit (origin >= 2024-02,
-p<0.001), jadi bukan artefak look-ahead bobot.
+Kesimpulan: dua perbaikan data menaikkan hasil secara besar. Memakai rata-rata
+bulanan alih-alih `last` menurunkan MAE dari 0.714 ke 0.474 (DM -3.39, p=0.001);
+menambah bobot IHK menurunkan lagi ke 0.381. Uji bersarang terhadap inflasi umum
+resmi kini signifikan: -0.193 (DM -2.60, p=0.009) tanpa bobot, -0.244
+(DM -2.90, p=0.004) berbobot. Hasil bertahan pada subset setelah bobot terbit.
 
-Bobot tidak mengubah forecast satu bulan ke depan (p=0.514). Sinyal PIHPS
-bersifat kontemporer: membantu nowcast bulan berjalan, tidak membantu meramal
-bulan berikutnya. Untuk inflasi umum YoY, tidak ada tambahan.
+Forecast satu bulan ke depan tetap tidak membaik; dengan fitur `mean` malah
+signifikan lebih buruk (h1 +0.066, DM +2.79, p=0.005). Sinyal PIHPS murni
+kontemporer. Untuk inflasi umum YoY dan tiga kontrol negatif, tidak ada tambahan.
 
-Untuk forecast satu bulan ke depan, tambahan fitur harga tidak signifikan baik
-dibanding AR(1) maupun headline. Untuk inflasi umum YoY, tidak ada tambahan sama
-sekali. Sinyal harga pangan bersifat kontemporer, bukan prediktif, dan sebagian
-besar informasinya sudah tercermin di inflasi umum bulanan.
+Untuk forecast satu bulan ke depan, tambahan fitur harga tidak membantu; dengan
+fitur `mean` hasilnya signifikan lebih buruk (DM +2.79, p=0.005). Untuk inflasi
+umum YoY, tidak ada tambahan sama sekali. Sinyal harga pangan bersifat
+kontemporer, bukan prediktif, dan sebagian besar informasinya sudah tercermin di
+inflasi umum bulanan.
 
 Kontrol negatif: tiga kelompok yang tidak dipengaruhi harga beras/cabai/daging —
-`rokok_mtm`, `minuman_mtm`, `alkohol_mtm` — tidak membaik; selisihnya -0.002,
-+0.002, dan +0.001 (semua praktis nol). Artinya perbaikan di `food_mtm` bukan
+`rokok_mtm`, `minuman_mtm`, `alkohol_mtm` — tidak membaik; selisihnya -0.008,
+-0.003, dan +0.015 (semua praktis nol). Artinya perbaikan di `food_mtm` bukan
 artefak pipeline atau overfitting fitur, tapi spesifik ke kelompok yang harganya
 memang kita pantau.
 
@@ -286,11 +294,12 @@ Batasan: 48 bulan uji, target disambung antar dua basis IHK, dan satu kali
 spesifikasi (tanpa tuning). Bobot IHK 2022 baru terbit Februari 2024, jadi
 prediksi 2022-10 s/d 2024-01 memakai bobot ex-post; subset setelah terbit tetap
 signifikan, tapi bulannya tinggal 32. Beberapa spesifikasi sudah dicoba (tanpa
-bobot, berbobot, dua horizon), jadi p=0.001 dibaca sebagai bukti kuat, bukan
-konfirmasi pre-registrasi. Fitur memakai harga sepanjang bulan, jadi ini nowcast
-akhir bulan (CPI belum rilis), bukan prediksi sebelum bulan berjalan. Backtest
-memakai nilai final, bukan vintage rilis pertama, sehingga revisi BPS/PIHPS
-belum tercermin.
+bobot, berbobot, `mean` vs `last`, dua horizon), jadi p=0.004 dibaca sebagai
+bukti kuat, bukan konfirmasi pre-registrasi. Fitur memakai harga sepanjang bulan,
+jadi ini nowcast akhir bulan (CPI belum rilis), bukan prediksi sebelum bulan
+berjalan. Backtest memakai nilai final, bukan vintage rilis pertama, sehingga
+revisi BPS/PIHPS belum tercermin. Harga sumber juga tidak rata: 34,3% nilai
+`last` bulanan berasal dari run identik >=5 hari, dan ada anomali 2020-07-31.
 
 Catatan pembanding `headline_mtm`: nilainya dirilis BPS bersamaan dengan target
 `food_mtm` (awal bulan berikutnya), jadi model `AR(1)+headline` **bukan** nowcast
