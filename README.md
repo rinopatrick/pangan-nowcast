@@ -165,6 +165,30 @@ gitignored; yang di-commit hanya kode ekspornya.
 Publikasi ke Hugging Face Datasets butuh login lebih dulu (`hf auth login`) dan
 nama repo tujuan; belum dijalankan karena belum ada kredensial di mesin ini.
 
+## Bobot IHK untuk indeks berbobot
+
+`src/pangan/weights.py` memetakan 21 komoditas PIHPS ke 10 kategori IHK nasional.
+Bobot diambil dari BPS, *Diagram Timbang Indeks Harga Konsumen Hasil Survei Biaya
+Hidup 2022* (Katalog 7102024), Tabel 1.1 halaman 3-38, kolom "Persentase Nilai
+Konsumsi Terhadap Total":
+
+| kategori IHK | bobot % IHK | komoditas PIHPS |
+|---|---|---|
+| BERAS | 3.4260 | com_1..com_6 |
+| DAGING AYAM RAS | 1.5843 | com_7 |
+| DAGING SAPI | 0.4926 | com_8, com_9 |
+| TELUR AYAM RAS | 0.9333 | com_10 |
+| BAWANG MERAH | 0.5098 | com_11 |
+| BAWANG PUTIH | 0.3173 | com_12 |
+| CABAI MERAH | 0.4485 | com_13, com_14 |
+| CABAI RAWIT | 0.3395 | com_15, com_16 |
+| MINYAK GORENG | 1.3175 | com_17..com_19 |
+| GULA PASIR | 0.3276 | com_20, com_21 |
+
+Total cakupan 9,6964% keranjang IHK, atau 34,63% dari kelompok makanan (27,9999%).
+Beberapa komoditas PIHPS dalam satu kategori dirata-ratakan, lalu kategori
+dibobot. Kolomnya `mom_weighted` dan `mom_weighted_3`.
+
 ## Hasil backtest
 
 Rolling-origin, `--min-train 30`, tiap prediksi hanya memakai data sebelum bulan uji.
@@ -178,14 +202,18 @@ Rolling-origin, `--min-train 30`, tiap prediksi hanya memakai data sebelum bulan
 | `cpi_yoy` | 0 | AR(1)+harga | 31 | 0.398 | 0.511 |
 | `food_mtm` (makanan m-to-m) | 0 | naive | 48 | 0.981 | 1.288 |
 | `food_mtm` | 0 | AR(1) | 48 | 0.795 | 0.989 |
-| `food_mtm` | 0 | AR(1)+harga | 48 | 0.714 | **0.880** |
+| `food_mtm` | 0 | AR(1)+harga | 48 | 0.714 | 0.880 |
+| `food_mtm` | 0 | AR(1)+harga berbobot | 48 | 0.703 | 0.884 |
 | `food_mtm` | 0 | AR(1)+headline | 48 | 0.594 | 0.910 |
-| `food_mtm` | 0 | AR(1)+headline+harga | 48 | **0.560** | **0.836** |
+| `food_mtm` | 0 | AR(1)+headline+harga | 48 | 0.560 | 0.836 |
+| `food_mtm` | 0 | AR(1)+headline+berbobot | 48 | **0.545** | 0.844 |
 | `food_mtm` | 1 | naive | 47 | 0.987 | 1.297 |
 | `food_mtm` | 1 | AR(1) | 47 | 0.784 | 0.981 |
 | `food_mtm` | 1 | AR(1)+harga | 47 | 0.771 | 0.938 |
+| `food_mtm` | 1 | AR(1)+harga berbobot | 47 | 0.770 | 0.957 |
 | `food_mtm` | 1 | AR(1)+headline | 47 | 0.800 | 1.046 |
 | `food_mtm` | 1 | AR(1)+headline+harga | 47 | 0.783 | 0.997 |
+| `food_mtm` | 1 | AR(1)+headline+berbobot | 47 | 0.787 | 1.011 |
 | `rokok_mtm` (kontrol negatif) | 0 | naive | 48 | 0.189 | 0.284 |
 | `rokok_mtm` | 0 | AR(1) | 48 | 0.185 | 0.278 |
 | `rokok_mtm` | 0 | AR(1)+harga | 48 | 0.183 | 0.279 |
@@ -208,25 +236,35 @@ Uji utama memakai model bersarang (bukan dua model terpisah):
 `AR(1)+headline+harga` vs `AR(1)+headline`, dengan Diebold-Mariano
 (Newey-West, lag = 4·(n/100)^(2/9)):
 
-| horizon | selisih MAE | DM | p | n |
-|---|---|---|---|---|
-| 0 | -0.035 | -1.77 | 0.077 | 48 |
-| 1 | -0.018 | -0.70 | 0.486 | 47 |
+| horizon | varian | selisih MAE | DM | p | n |
+|---|---|---|---|---|---|
+| 0 | tanpa bobot | -0.035 | -1.77 | 0.077 | 48 |
+| 0 | berbobot IHK | **-0.049** | **-3.20** | **0.001** | 48 |
+| 1 | tanpa bobot | -0.018 | -0.70 | 0.486 | 47 |
+| 1 | berbobot IHK | -0.013 | -0.65 | 0.514 | 47 |
 
-Sebagai pembanding, DM untuk `AR(1)+harga` vs `AR(1)`: horizon 0 = -2.90
-(p=0.004), horizon 1 = -0.47 (p=0.639). DM `harga - headline`: horizon 0 = +1.39
-(p=0.166), horizon 1 = -0.60 (p=0.551).
+Uji ketahanan berbobot (origin >= 2024-02, saat bobot 2022 sudah terbit):
+n=32, selisih -0.067, DM -3.52, p<0.001. Origin >= 2025-01: n=21,
+selisih -0.090, DM -4.24, p<0.001.
+
+Sebagai pembanding, DM `AR(1)+harga` vs `AR(1)`: horizon 0 = -2.90 (p=0.004),
+horizon 1 = -0.47 (p=0.639). `AR(1)+harga berbobot` vs `AR(1)`: -5.14 (p<0.001).
+Berbobot vs tanpa bobot: -0.68 (p=0.494), jadi keduanya tidak terbedakan
+langsung; yang berubah adalah hasil uji bersarang.
 - `cpi_yoy` horizon 0 vs AR(1): -0.001 [-0.019, +0.017]
 - `rokok_mtm` kontrol vs AR(1): -0.002 [-0.009, +0.005]
 - `minuman_mtm` kontrol vs AR(1): +0.002 [+0.000, +0.004]
 - `alkohol_mtm` kontrol vs AR(1): +0.001 [-0.010, +0.011]
 
-Kesimpulan: harga pangan harian menambah akurasi dibanding naive dan AR(1)
-untuk **nowcast** inflasi makanan m-to-m, dan itu bertahan di DM (p=0.004).
-Namun uji yang menentukan adalah uji bersarang terhadap inflasi umum resmi:
-menambahkan fitur harga ke `AR(1)+headline` hanya menurunkan MAE 0.035 dengan
-DM -1.77 (p=0.077). Arahnya konsisten, tapi **belum signifikan pada 5%**.
-Untuk horizon 1, tambahannya -0.018 (p=0.486), praktis nol.
+Kesimpulan: dengan bobot konsumsi IHK, fitur harga PIHPS menambah akurasi
+**secara signifikan** di atas inflasi umum resmi untuk nowcast: selisih MAE
+-0.049, DM -3.20, p=0.001. Tanpa bobot hasilnya hanya -0.035 (p=0.077).
+Efek ini bertahan saat bobot benar-benar sudah terbit (origin >= 2024-02,
+p<0.001), jadi bukan artefak look-ahead bobot.
+
+Bobot tidak mengubah forecast satu bulan ke depan (p=0.514). Sinyal PIHPS
+bersifat kontemporer: membantu nowcast bulan berjalan, tidak membantu meramal
+bulan berikutnya. Untuk inflasi umum YoY, tidak ada tambahan.
 
 Untuk forecast satu bulan ke depan, tambahan fitur harga tidak signifikan baik
 dibanding AR(1) maupun headline. Untuk inflasi umum YoY, tidak ada tambahan sama
@@ -244,11 +282,15 @@ Catatan daya uji: varians ketiga kontrol jauh lebih kecil (MAE AR 0,108-0,185 vs
 konsisten dengan kontrol yang valid, tapi bukan bukti sekuat uji pada target
 bervarians besar.
 
-Batasan: 48 bulan uji, target disambung antar dua basis IHK, fitur masih rata-rata
-sederhana tanpa bobot konsumsi, dan satu kali spesifikasi (tanpa tuning). Fitur
-memakai harga sepanjang bulan, jadi ini nowcast akhir bulan (CPI belum rilis),
-bukan prediksi sebelum bulan berjalan. Backtest memakai nilai final, bukan vintage
-rilis pertama, sehingga revisi BPS/PIHPS belum tercermin.
+Batasan: 48 bulan uji, target disambung antar dua basis IHK, dan satu kali
+spesifikasi (tanpa tuning). Bobot IHK 2022 baru terbit Februari 2024, jadi
+prediksi 2022-10 s/d 2024-01 memakai bobot ex-post; subset setelah terbit tetap
+signifikan, tapi bulannya tinggal 32. Beberapa spesifikasi sudah dicoba (tanpa
+bobot, berbobot, dua horizon), jadi p=0.001 dibaca sebagai bukti kuat, bukan
+konfirmasi pre-registrasi. Fitur memakai harga sepanjang bulan, jadi ini nowcast
+akhir bulan (CPI belum rilis), bukan prediksi sebelum bulan berjalan. Backtest
+memakai nilai final, bukan vintage rilis pertama, sehingga revisi BPS/PIHPS
+belum tercermin.
 
 Catatan pembanding `headline_mtm`: nilainya dirilis BPS bersamaan dengan target
 `food_mtm` (awal bulan berikutnya), jadi model `AR(1)+headline` **bukan** nowcast
@@ -258,13 +300,11 @@ belum terbukti. Korelasi `food_mtm` vs `headline_mtm` = 0.580 (81 bulan).
 
 ## Selanjutnya
 
-1. Indeks harga berbobot konsumsi. Terblokir: bobot per komoditas tidak tersedia
-   sebagai variabel WebAPI (sudah dicek), jadi perlu Diagram Timbang dari publikasi
-   BPS (PDF/Excel) dan pemetaan komoditas PIHPS ke komoditas IHK.
-2. Publikasikan dataset fitur bulanan (Hugging Face Datasets) + datasheet.
-3. Pembanding resmi BPS: headline sudah selesai dan hasilnya nol (lihat di atas).
-   Langkah berikutnya IHK makanan level (var 2212, 2022=100) — lewat WebAPI hanya
-   tersedia 2024+, jadi riwayat 2020-2023 butuh arsip publikasi BPS.
+1. Publikasikan dataset fitur bulanan (Hugging Face Datasets) + datasheet.
+2. Vintage rilis pertama: backtest masih memakai nilai final. Butuh arsip rilis
+   BPS dan snapshot PIHPS agar revisi tidak bocor ke masa lalu.
+3. Perluas cakupan bobot: PIHPS baru memetakan 9,6964% keranjang IHK. Komoditas
+   lain butuh sumber harga baru, bukan sekadar bobot tambahan.
 
 ## Test
 
