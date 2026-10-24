@@ -9,6 +9,8 @@ def _rows(headline=False, weighted=False):
             "y_lag1": 0.9 + i * 0.1,
             "food_mom": 0.1,
             "food_mom_3": 0.3,
+            "food_mom_mean": 0.12,
+            "food_mom_mean_3": 0.36,
         }
         for i in range(6)
     ]
