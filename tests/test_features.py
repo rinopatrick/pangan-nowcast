@@ -86,3 +86,28 @@ def test_build_dataset_adds_mean_features():
     assert rows[2]["mom_mean_3"] is None
     assert round(rows[3]["mom_mean_3"], 6) == 30.0
     assert rows[3]["mom_pct"] is not None
+
+def test_build_dataset_as_of_day_uses_same_window():
+    prices = [
+        ("com_1", "2024-01-05", 100.0),
+        ("com_1", "2024-01-25", 300.0),
+        ("com_1", "2024-02-05", 150.0),
+        ("com_1", "2024-02-25", 330.0),
+    ]
+    full = features.build_dataset(prices, {"2024-02": 1.0})
+    part = features.build_dataset(prices, {"2024-02": 1.0}, as_of_day=10)
+
+    assert round(full[1]["mom_mean"], 6) == 20.0
+    assert round(part[1]["mom_mean"], 6) == 50.0
+    assert round(part[1]["mom_pct"], 6) == 50.0
+    assert part[1]["mean"] == 150.0
+    assert part[1]["n_obs"] == 1
+
+def test_build_dataset_as_of_day_keeps_first_window_missing():
+    prices = [
+        ("com_1", "2024-02-05", 110.0),
+        ("com_1", "2024-03-05", 121.0),
+    ]
+    rows = features.build_dataset(prices, {}, as_of_day=10)
+    assert rows[0]["mom_mean"] is None
+    assert round(rows[1]["mom_mean"], 6) == 10.0
