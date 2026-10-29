@@ -28,7 +28,12 @@ COMPARATOR = "headline_mtm"
 def load_dataset(path: str, target: str = TARGET, horizon: int = 0) -> list[dict]:
     with open(path, newline="", encoding="utf-8") as fh:
         rows = list(csv.DictReader(fh))
+    return build_panel(rows, target=target, horizon=horizon)
 
+def build_panel(
+    rows: list[dict], target: str = TARGET, horizon: int = 0
+) -> list[dict]:
+    """Panel bulanan dari baris dataset (tanpa membaca file)."""
     by_month: dict[str, list[dict]] = {}
     for row in rows:
         by_month.setdefault(row["month"], []).append(row)

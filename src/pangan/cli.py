@@ -1,4 +1,5 @@
-"""CLI: pangan refs | ingest | cpi | bps-vars | bps-pull | dataset | backtest."""
+"""CLI: pangan refs | ingest | cpi | bps-vars | bps-pull | dataset | asof |
+backtest | report | export."""
 
 from __future__ import annotations
 
@@ -88,9 +89,19 @@ def _cmd_bps_pull(args: argparse.Namespace) -> int:
     return 0
 
 
-def _cmd_dataset(args: argparse.Namespace) -> int:
-    con = store.connect(args.db)
-    store.init(con)
+def _load_extras(con, specs):
+    extras = {}
+    for spec in specs or []:
+        if "=" not in spec:
+            raise ValueError(f"--extra harus NAME=SERIES, bukan {spec!r}")
+        name, series = spec.split("=", 1)
+        values = macro.load(con, series)
+        if not values:
+            raise ValueError(f"seri '{series}' kosong di tabel macro")
+        extras[name.strip()] = values
+    return extras
+
+def _price_rows(con):
     cur = con.execute(
         """
         SELECT commodity_id, date,
@@ -102,7 +113,12 @@ def _cmd_dataset(args: argparse.Namespace) -> int:
         ORDER BY date
         """
     )
-    prices = cur.fetchall()
+    return cur.fetchall()
+
+def _cmd_dataset(args: argparse.Namespace) -> int:
+    con = store.connect(args.db)
+    store.init(con)
+    prices = _price_rows(con)
     if not prices:
         print("tabel price kosong; jalankan 'pangan ingest' dulu", file=sys.stderr)
         return 1
@@ -110,18 +126,18 @@ def _cmd_dataset(args: argparse.Namespace) -> int:
     if not target:
         print(f"seri '{args.target_series}' kosong di tabel macro", file=sys.stderr)
         return 1
-    extras = {}
-    for spec in args.extra or []:
-        if "=" not in spec:
-            print(f"--extra harus NAME=SERIES, bukan {spec!r}", file=sys.stderr)
-            return 1
-        name, series = spec.split("=", 1)
-        values = macro.load(con, series)
-        if not values:
-            print(f"seri '{series}' kosong di tabel macro", file=sys.stderr)
-            return 1
-        extras[name.strip()] = values
-    rows = features.build_dataset(prices, target, args.target_name, extras=extras)
+    try:
+        extras = _load_extras(con, args.extra)
+    except ValueError as exc:
+        print(exc, file=sys.stderr)
+        return 1
+    rows = features.build_dataset(
+        prices,
+        target,
+        args.target_name,
+        extras=extras,
+        as_of_day=args.as_of_day or None,
+    )
     fields = [
         "month",
         "commodity_id",
@@ -130,12 +146,15 @@ def _cmd_dataset(args: argparse.Namespace) -> int:
         args.target_name,
         *extras,
     ]
-    with open(args.out, "w", newline="", encoding="utf-8") as fh:
+    write_csv(args.out, rows, fields)
+    print(f"dataset: {len(rows)} baris -> {args.out}")
+    return 0
+
+def write_csv(path, rows, fields):
+    with open(path, "w", newline="", encoding="utf-8") as fh:
         writer = csv.DictWriter(fh, fieldnames=fields)
         writer.writeheader()
         writer.writerows(rows)
-    print(f"dataset: {len(rows)} baris -> {args.out}")
-    return 0
 
 
 def _cmd_backtest(args: argparse.Namespace) -> int:
@@ -297,6 +316,62 @@ def _cmd_export(args: argparse.Namespace) -> int:
     print(f"datasheet: {md_path}")
     return 0
 
+def _cmd_asof(args: argparse.Namespace) -> int:
+    con = store.connect(args.db)
+    store.init(con)
+    prices = _price_rows(con)
+    if not prices:
+        print("tabel price kosong; jalankan 'pangan ingest' dulu", file=sys.stderr)
+        return 1
+    target = macro.load(con, args.target_series)
+    if not target:
+        print(f"seri '{args.target_series}' kosong di tabel macro", file=sys.stderr)
+        return 1
+    try:
+        extras = _load_extras(con, args.extra)
+    except ValueError as exc:
+        print(exc, file=sys.stderr)
+        return 1
+
+    print(f"target={args.target_name} horizon={args.horizon} min_train={args.min_train}")
+    print(
+        f"{'hari':>4} {'n':>3} {'AR':>7} {'harga':>7} {'bobot':>7} "
+        f"{'head':>7} {'hl+bb':>7} {'nested':>8} {'DM':>6} {'p':>6}"
+    )
+    for day in (int(x) for x in args.days.split(",") if x.strip()):
+        rows = features.build_dataset(
+            prices,
+            target,
+            args.target_name,
+            extras=extras,
+            as_of_day=None if day >= 31 else day,
+        )
+        panel = backtest.build_panel(rows, target=args.target_name, horizon=args.horizon)
+        res = backtest.rolling(panel, min_train=args.min_train)
+        if not res:
+            continue
+
+        def mae(key: str) -> float:
+            subset = backtest.with_predictions(res, [key])
+            return backtest.metrics(subset, key)["mae"] if subset else float("nan")
+
+        nested = backtest.with_predictions(
+            res, ["pred_headline", "pred_headline_weighted"]
+        )
+        if nested:
+            dm = backtest.dm_test(
+                nested, base="pred_headline", feat="pred_headline_weighted"
+            )
+            diff, stat, p = dm["diff"], dm["stat"], dm["p_value"]
+        else:
+            diff = stat = p = float("nan")
+        print(
+            f"{day:4d} {len(res):3d} {mae('pred_ar'):7.3f} {mae('pred_feat'):7.3f} "
+            f"{mae('pred_weighted'):7.3f} {mae('pred_headline'):7.3f} "
+            f"{mae('pred_headline_weighted'):7.3f} {diff:8.3f} {stat:6.2f} {p:6.3f}"
+        )
+    return 0
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="pangan", description="Harga pangan harian PIHPS -> SQLite")
     parser.add_argument("--db", default="data/pangan.db")
@@ -341,6 +416,20 @@ def main(argv: list[str] | None = None) -> int:
         metavar="NAME=SERIES",
         help="kolom tambahan dari tabel macro, mis. headline_mtm=bps_headline_mtm",
     )
+    dataset.add_argument(
+        "--as-of-day",
+        type=int,
+        default=0,
+        help="potong tiap bulan pada tanggal ini (0 = sebulan penuh)",
+    )
+
+    ao = sub.add_parser("asof", help="kurva nowcast per tanggal potong")
+    ao.add_argument("--days", default="5,10,15,20,25,31")
+    ao.add_argument("--target-series", default="food_mtm")
+    ao.add_argument("--target-name", default="food_mtm")
+    ao.add_argument("--extra", action="append", metavar="NAME=SERIES")
+    ao.add_argument("--horizon", type=int, default=0, choices=[0, 1])
+    ao.add_argument("--min-train", type=int, default=30)
 
     bt = sub.add_parser("backtest", help="rolling-origin: naive vs AR(1)+fitur harga")
     bt.add_argument("--dataset", default="data/dataset.csv")
@@ -380,6 +469,8 @@ def main(argv: list[str] | None = None) -> int:
             return _cmd_report(args)
         if args.cmd == "export":
             return _cmd_export(args)
+        if args.cmd == "asof":
+            return _cmd_asof(args)
         return _cmd_ingest(args)
     except (bps.BpsError, pihps.PihpsError) as exc:
         print(f"error: {exc}", file=sys.stderr)

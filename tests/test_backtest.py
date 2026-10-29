@@ -144,6 +144,12 @@ def test_load_dataset_reads_mean_mom(tmp_path):
     assert panel[1]["food_mom_mean_3"] is None
     assert panel[2]["food_mom_mean_3"] == 6.0
 
+def test_build_panel_matches_load_dataset(tmp_path):
+    path = tmp_path / "d.csv"
+    rows = _monthly_rows(["2024-01", "2024-02"], ["2.5", "2.6"])
+    _write_dataset(path, rows)
+    assert backtest.build_panel(rows) == backtest.load_dataset(str(path))
+
 def _headline_panel(last_y=3.0, last_headline=0.9):
     panel = []
     for i in range(12):

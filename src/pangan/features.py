@@ -58,13 +58,19 @@ def build_dataset(
     target_name: str = "cpi_yoy",
     extras: dict[str, dict[str, float]] | None = None,
     weighted: bool = True,
+    as_of_day: int | None = None,
 ) -> list[dict]:
     """`extras` = {nama kolom: {month: nilai}}. Nilai hilang menjadi None.
 
+    `as_of_day` memotong setiap bulan pada tanggal itu (mis. 15), sehingga
+    statistik bulan t dan t-1 sama-sama memakai jendela hari 1..as_of_day.
+    Ini yang membuat nowcast tengah bulan sebanding antar bulan.
     `weighted=True` menambah `mom_weighted` dan `mom_weighted_3` memakai bobot
     IHK nasional dari `pangan.weights`.
     """
     extras = extras or {}
+    if as_of_day is not None:
+        prices = [p for p in prices if int(p[1][8:10]) <= as_of_day]
     monthly_rows = monthly(prices)
     weighted_mom = weights.weighted_mom(monthly_rows, field="mom_mean") if weighted else {}
     rows = []
