@@ -279,6 +279,33 @@ umum YoY, tidak ada tambahan sama sekali. Sinyal harga pangan bersifat
 kontemporer, bukan prediktif, dan sebagian besar informasinya sudah tercermin di
 inflasi umum bulanan.
 
+## Nowcast tengah bulan
+
+```bash
+pangan asof --extra headline_mtm=bps_headline_mtm --days 5,10,15,20,25,31
+```
+
+Setiap bulan dipotong pada tanggal itu untuk bulan t **dan** t-1, jadi m-to-m
+membandingkan jendela yang sama (hari 1..D), bukan parsial vs bulan penuh.
+Targetnya tetap inflasi bulan penuh.
+
+| potong | AR(1) | harga | berbobot | headline | headline+berbobot | selisih | DM | p |
+|---|---|---|---|---|---|---|---|---|
+| hari 5 | 0.795 | 0.700 | 0.703 | 0.594 | 0.568 | -0.026 | -0.89 | 0.372 |
+| hari 10 | 0.795 | 0.631 | 0.589 | 0.594 | 0.519 | -0.076 | -1.45 | 0.148 |
+| hari 15 | 0.795 | 0.589 | 0.497 | 0.594 | 0.470 | -0.125 | -1.79 | 0.073 |
+| hari 20 | 0.795 | 0.531 | 0.436 | 0.594 | 0.420 | -0.174 | -2.23 | 0.025 |
+| hari 25 | 0.795 | 0.496 | 0.407 | 0.594 | 0.385 | -0.210 | -2.58 | 0.010 |
+| hari 31 | 0.795 | 0.474 | 0.381 | 0.594 | 0.350 | -0.244 | -2.90 | 0.004 |
+
+`selisih`/`DM`/`p` = uji bersarang berbobot vs `AR(1)+headline`.
+
+Bacaan: sampai sekitar tanggal 15, PIHPS belum menambah nilai signifikan di atas
+inflasi umum (p=0.073). Mulai tanggal 20 hasilnya signifikan (p=0.025) dan menguat
+sampai akhir bulan. Pada tanggal 5, harga bahkan kalah dari headline (0.700 vs
+0.594). Klaim yang jujur: **nowcast berguna pada 10 hari terakhir bulan**, bukan
+sejak awal bulan.
+
 Kontrol negatif: tiga kelompok yang tidak dipengaruhi harga beras/cabai/daging —
 `rokok_mtm`, `minuman_mtm`, `alkohol_mtm` — tidak membaik; selisihnya -0.008,
 -0.003, dan +0.015 (semua praktis nol). Artinya perbaikan di `food_mtm` bukan
@@ -299,7 +326,9 @@ bukti kuat, bukan konfirmasi pre-registrasi. Fitur memakai harga sepanjang bulan
 jadi ini nowcast akhir bulan (CPI belum rilis), bukan prediksi sebelum bulan
 berjalan. Backtest memakai nilai final, bukan vintage rilis pertama, sehingga
 revisi BPS/PIHPS belum tercermin. Harga sumber juga tidak rata: 34,3% nilai
-`last` bulanan berasal dari run identik >=5 hari, dan ada anomali 2020-07-31.
+`last` bulanan berasal dari run identik >=5 hari, dan ada anomali 2020-07-31. Pada
+nowcast tengah bulan, jendela hari 1..D hanya berisi sekitar 5-15 hari bursa,
+sehingga `mean` lebih berisik; bobotnya juga tetap pola konsumsi 2022.
 
 Catatan pembanding `headline_mtm`: nilainya dirilis BPS bersamaan dengan target
 `food_mtm` (awal bulan berikutnya), jadi model `AR(1)+headline` **bukan** nowcast
